@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      #   - name: Install CMake
+      #     uses: jwlawson/actions-setup-cmake@v1.14
+      #     with:
+      #       cmake-version: "3.22.x"
+
+      - name: Install dependences
+        run: |
+          sudo apt update
+          sudo apt install -y build-essential cmake graphviz graphviz-dev libgtest-dev
+
+      - name: Build
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build
+
+      - name: Tests
+        run: ctest --test-dir build/tests --output-on-failure
+
+      - name: Show date
+        run: date

@@ -1,0 +1,5 @@
+.vscode/
+build/
+results.txt
+output/
+include/lexer.h
