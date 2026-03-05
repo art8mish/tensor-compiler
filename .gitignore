@@ -1,5 +1,5 @@
 .vscode/
 build/
-results.txt
-output/
-include/lexer.h
+results/
+third_party
+.venv/

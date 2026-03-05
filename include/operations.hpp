@@ -5,19 +5,20 @@
 #include <vector>
 
 #include "node.hpp"
+#include "tensor_node.hpp"
 #include <graphviz/cgraph.h>
 #include <gvc.h>
 
 namespace tensor_compiler {
 
-template <typename NodePtr> class OpNode : public Node {
+template <typename TensorNodePtr = TensorNode *> class OpNode : public Node {
     Shape out_shape_{};
-    NodePtr out_Y{};
+    TensorNodePtr out_Y{};
 
     virtual Shape calc_out_shape() const = 0;
 
 public:
-    OpNode(const std::string &name, Type type) : Node(name, type) {}
+    OpNode(std::string name, Type type) : Node(std::move(name), type) {}
 
     const Shape &get_out_shape() const {
         if (out_shape_.empty())
@@ -25,19 +26,29 @@ public:
         return out_shape_;
     }
 
-    void set_out_tensor(NodePtr out_tensor) {
+    void set_out_tensor(TensTensorNodePtr out_tensor) {
+        if (out_Y)
+            throw std::logic_error("Tensor is already tied");
         out_shape = get_out_shape();
         if (out_tensor->shape() != out_shape)
             throw std::invalid_argument("Output tensor is incompatible with out shape");
         out_Y = out_tensor;
     }
+
+    Agnode_t *draw(Agraph_t *g) const override {
+        Agnode_t *node = draw_this();
+        if (out_Y) {
+            Agnode_t *out_node = out_Y->draw(g);
+            agedge(g, node, out_node, nullptr, 1);
+        }
+        return node;
+    }
 };
 
-template <typename NodePtr>
-class ConvNode : public OpNode {
-    NodePtr in_X;
-    NodePtr in_W;
-    NodePtr in_Bias; // can be nullptr
+template <typename TensorNodePtr = TensorNode *> class ConvNode : public OpNode {
+    TensTensorNodePtr in_X;
+    TensTensorNodePtr in_W;
+    TensTensorNodePtr in_Bias; // can be nullptr
 
     size_t dim_;
     std::vector<uint64_t> kernel_shape_; // [x1_size, x2_size, ...]
@@ -116,7 +127,7 @@ class ConvNode : public OpNode {
                                          std::to_string(i));
 
             uint64_t d_out = (d_in + pad_begin + pad_end - del_k) / s + 1;
-            ShapeType shape_out = static_cast<ShapeType>(d_out);
+            dim_t shape_out = static_cast<dim_t>(d_out);
             out_shape.push_back(shape_out);
         }
 
@@ -124,11 +135,12 @@ class ConvNode : public OpNode {
     }
 
 public:
-    ConvNode(const std::string &name, const std::vector<uint64_t> &kernel_shape, NodePtr X, NodePtr W,
-             NodePtr bias = {}, const std::vector<uint64_t> &strides = {},
-             const std::vector<uint64_t> &dilations = {}, const std::vector<uint64_t> &pads = {},
+    ConvNode(std::string name, std::vector<uint64_t> kernel_shape, TensTensorNodePtr X, TensTensorNodePtr W,
+             TensTensorNodePtr bias = {}, std::vector<uint64_t> strides = {},
+             std::vector<uint64_t> dilations = {}, std::vector<uint64_t> pads = {},
              uint64_t group = 1)
-        : OpNode(name, Node::Type::CONV), in_X{X}, in_W{W}, in_Bias{bias}, dim_{kernel_shape.size()},
+        : OpNode(std::move(name), Node::Type::CONV), in_X{std::move(X)}, in_W{std::move(W)},
+          in_Bias{std::move(bias)}, dim_{kernel_shape.size()},
           kernel_shape_(std::move(kernel_shape)), group_(g) {
         if (strides.empty())
             strides_.assign(dim_, 1);
@@ -150,10 +162,10 @@ public:
 };
 
 // Gemm: Y = alpha*A*B + beta*C)
-template <typename NodePtr> class GemmNode : public Node {
-    NodePtr in_A;
-    NodePtr in_B;
-    NodePtr in_C; // can be nullptr
+template <typename TensorNodePtr = TensorNode *> class GemmNode : public OpNode {
+    TensTensorNodePtr in_A;
+    TensTensorNodePtr in_B;
+    TensTensorNodePtr in_C; // can be nullptr
 
     double alpha_;
     double beta_;
@@ -170,15 +182,15 @@ template <typename NodePtr> class GemmNode : public Node {
         if (shape_A.size() != 2 || shape_B.size() != 2)
             throw std::invalid_argument("GemmNode: A and B are not a 2D tensors");
 
-        ShapeType A_rows = shape_A[0];
-        ShapeType A_cols = shape_A[1];
-        ShapeType B_rows = shape_B[0];
-        ShapeType B_cols = shape_B[1];
+        dim_t A_rows = shape_A[0];
+        dim_t A_cols = shape_A[1];
+        dim_t B_rows = shape_B[0];
+        dim_t B_cols = shape_B[1];
 
-        ShapeType i = trA_ ? shape_A[1] : shape_A[0]; // A rows
-        ShapeType k_A = trA_ ? A_rows : A_cols;       // A cols
-        ShapeType k_B = trB_ ? B_cols : B_rows;       // B rows
-        ShapeType j = trB_ ? shape_B[0] : shape_B[1]; // B cols
+        dim_t i = trA_ ? shape_A[1] : shape_A[0]; // A rows
+        dim_t k_A = trA_ ? A_rows : A_cols;       // A cols
+        dim_t k_B = trB_ ? B_cols : B_rows;       // B rows
+        dim_t j = trB_ ? shape_B[0] : shape_B[1]; // B cols
 
         if (k_A != k_B) {
             throw std::invalid_argument(
@@ -203,8 +215,8 @@ template <typename NodePtr> class GemmNode : public Node {
         const auto &shape_A = in_A->shape;
         const auto &shape_B = in_B->shape;
 
-        ShapeType i = trA_ ? shape_A[1] : shape_A[0]; // A rows
-        ShapeType j = trB_ ? shape_B[0] : shape_B[1]; // B cols
+        dim_t i = trA_ ? shape_A[1] : shape_A[0]; // A rows
+        dim_t j = trB_ ? shape_B[0] : shape_B[1]; // B cols
 
         out_shape.push_back(i);
         out_shape.push_back(j);
@@ -212,10 +224,10 @@ template <typename NodePtr> class GemmNode : public Node {
     }
 
 public:
-    GemmNode(const std::string &name, NodePtr A, NodePtr B, NodePtr C = {}, double alpha = 1.0,
+    GemmNode(std::string name, TensTensorNodePtr A, TensTensorNodePtr B, TensTensorNodePtr C = {}, double alpha = 1.0,
              double beta = 1.0, bool transpose_A = false, bool transpose_B = false)
-        : OpNode(name, Node::Type::GEMM), in_A{A}, in_B{B}, in_C{C}, alpha_{alpha}, beta_{beta},
-          trA_{transpose_A}, trB_{transpose_B} {
+        : OpNode(std::move(name), Node::Type::GEMM), in_A{std::move(A)}, in_B{std::move(B)},
+          in_C{std::move(C)}, alpha_{alpha}, beta_{beta}, trA_{transpose_A}, trB_{transpose_B} {
         validate();
     }
     // double get_alpha() const {
@@ -232,9 +244,9 @@ public:
     // }
 };
 
-template <typename NodePtr> class MatMulNode : public Node {
-    NodePtr in_A;
-    NodePtr in_B;
+template <typename TensorNodePtr = TensorNode *> class MatMulNode : public OpNode {
+    TensTensorNodePtr in_A;
+    TensTensorNodePtr in_B;
 
     void validate() {
         if (!in_A || !in_B)
@@ -245,121 +257,218 @@ template <typename NodePtr> class MatMulNode : public Node {
 
         size_t rank_A = shape_A.size();
         size_t rank_B = shape_B.size();
+        if (rank_A == 0 || rank_B == 0)
+            throw std::invalid_argument("MatMulNode: tensors can't be scalars");
 
-        ShapeType k_A, k_B;
-        ShapeType i = 1, j = 1;
+        dim_t k_A = shape_A[rank_A - 1];
+        dim_t k_B = (rank_B == 1) ? shape_B[0] : shape_B[rank_B - 2];
+        if (k_A != k_B)
+            throw std::invalid_argument("MatMulNode: inner dimensions of inputs are incompatible");
 
-        // both 1D -> scalar
-        if (rank_A == 1 && rank_B == 1) {
-            // Оба векторы: длина должна совпадать
-            if (shape_A[0] != shape_B[0])
-                throw std::invalid_argument(
-                    "MatMulNode: 1D tensors shapes are incompatible");
-            k_A = shape_A[0];
-            k_B = shape_B[0];
-        }
+        size_t batch_rank_A = (rank_A > 2) ? rank_A - 2 : 0;
+        size_t batch_rank_B = (rank_B > 2) ? rank_B - 2 : 0;
+        size_t min_batch_rank = std::min(batch_rank_A, batch_rank_B);
 
-        //1=1D and 2>=2D -> scalar
-        else if (rank_A == 1 && rank_B >= 2) {
-            k_A = shape_A[0];
-            k_B = shape_B[rank_B - 2]; // prelast B
-            j = shape_B[rank_B - 1];
-        }
-        else if (rank_A >= 2 && rank_B == 1) {
-            k_A = shape_A[rank_A - 1]; // last A
-            k_B = shape_B[0];
-            i = shape_A[rank_A - 2];   // prelast A
-        }
-        else if (rank_A >= 2 && rank_B >= 2) {
-            k_A = shape_A[rank_A - 1]; // last A
-            k_B = shape_B[rank_B - 2]; // prelast B
-            i = shape_A[rank_A - 2];
-            j = shape_B[rank_B - 1];
-        }
-        else
-            throw std::invalid_argument("MatMulNode: invalid tensor ranks");
-
-        if (k_A != k_B) {
-            throw std::invalid_argument(
-                "MatMulNode: inner dimensions of inputs are incompatible");
+        if (min_batch_rank > 0) {
+            size_t i_A = batch_rank_A - 1;
+            size_t i_B = batch_rank_B - 1;
+            for (size_t i = min_batch_rank - 1; i >= 0; --i) {
+                dim_t dim_A = shape_A[i_A--];
+                dim_t dim_B = shape_B[i_B--];
+                if (dim_A != dim_B && dim_A != 1 && dim_B != 1)
+                    throw std::invalid_argument(
+                        "MatMulNode: batch dimensions are incompatible for broadcasting");
+            }
         }
     }
 
     Shape calc_out_shape() {
-        Shape out_shape {};
-        std::vector<ShapeType> batch_A, batch_B;
-        if (rank_A == 1)
-            batch_A = {};
-        else
-            for (size_t i = 0; i < rank_A - 2; ++i)
-                batch_A.push_back(shape_A[i]);
+        const Shape &shape_A = in_A->shape;
+        const Shape &shape_B = in_B->shape;
+        size_t rank_A = shape_A.size();
+        size_t rank_B = shape_B.size();
 
-        if (rank_B == 1)
-            batch_B = {};
-        else
-            for (size_t i = 0; i < rank_B - 2; ++i)
-                batch_B.push_back(shape_B[i]);
+        size_t batch_rank_A = (rank_A > 2) ? rank_A - 2 : 0;
+        size_t batch_rank_B = (rank_B > 2) ? rank_B - 2 : 0;
+        size_t batch_rank = std::max(batch_rank_A, batch_rank_B)
 
-        size_t max_batch = std::max(batch_A.size(), batch_B.size());
-        out_shape.resize(max_batch, 1);
+            Shape out_shape{};
+        if (batch_rank > 0) {
+            out_shape.resize(batch_rank, 1);
 
-        for (size_t i = 0; i < max_batch; ++i) {
-            ShapeType dim_A = (i < batch_A.size()) ? batch_A[batch_A.size() - 1 - i] : 1;
-            ShapeType dim_B = (i < batch_B.size()) ? batch_B[batch_B.size() - 1 - i] : 1;
-
-            if (dim_A != dim_B && dim_A != 1 && dim_B != 1) {
-                throw std::invalid_argument(
-                    "MatMulNode: batch dimensions are incompatible for broadcasting");
+            size_t i_A = (batch_rank_A > 1) ? batch_rank_A - 1 : 0;
+            size_t i_B = (batch_rank_B > 1) ? batch_rank_B - 1 : 0;
+            for (size_t i = batch_rank - 1; i >= 0; --i) {
+                dim_t dim_A = (i_A >= 0) ? shape_A[i_A--] : 1;
+                dim_t dim_B = (i_B >= 0) ? shape_B[i_B--] : 1;
+                out_shape[i] = std::max(dim_A, dim_B);
             }
-
-            // Результирующая размерность по этой оси — максимум
-            out_shape[max_batch - 1 - i] = std::max(dim_A, dim_B);
         }
 
+        if (rank_A >= 2)
+            out_shape.push_back(shape_A[rank_A - 2]);
+        if (rank_B >= 2)
+            out_shape.push_back(shape_B[rank_B - 1]);
 
-        ShapeType i = (rank_A >= 2) ? shape_A[rank_A - 2] : 1;
-        ShapeType j = (rank_B >= 2) ? shape_B[rank_B - 1] : 1;
-        if (i != 1 || j != 1) {
-            out_shape.push_back(i);
-            out_shape.push_back(j);
-        }
-        // Если out_shape пуст, это означает скаляр (0D тензор)
         return out_shape;
     }
 
 public:
-    MatMulNode(const std::string &name) : OpNode(name, Node::Type::MATMUL) {}
+    MatMulNode(std::string name, TensTensorNodePtr A, TensTensorNodePtr B)
+        : OpNode(std::move(name), Node::Type::MATMUL), in_A{std::move(A)}, in_B{std::move(B)} {
+        validate();
+    }
 };
 
-template <typename NodePtr> class AddNode : public OpNode {
-    NodePtr in_A;
-    NodePtr in_B;
+template <typename TensorNodePtr = TensorNode *> class AddNode : public OpNode {
+    TensTensorNodePtr in_A;
+    TensTensorNodePtr in_B;
+
+    void validate() {
+        if (!in_A || !in_B)
+            throw std::invalid_argument("AddNode: input tensors are not provided");
+
+        const auto &shape_A = in_A->shape;
+        const auto &shape_B = in_B->shape;
+
+        size_t rank_A = shape_A.size();
+        size_t rank_B = shape_B.size();
+        size_t min_rank = std::min(rank_A, rank_B);
+
+        if (min_rank > 0) {
+            size_t i_A = rank_A - 1;
+            size_t i_B = rank_B - 1;
+            for (size_t i = min_rank - 1; i >= 0; --i) {
+                dim_t dim_A = shape_A[i_A--];
+                dim_t dim_B = shape_B[i_B--];
+                if (dim_A != dim_B && dim_A != 1 && dim_B != 1)
+                    throw std::invalid_argument(
+                        "AddNode: dimensions are incompatible for broadcasting");
+            }
+        }
+    }
+
+    Shape calc_out_shape() {
+        const Shape &shape_A = in_A->shape;
+        const Shape &shape_B = in_B->shape;
+        size_t rank_A = shape_A.size();
+        size_t rank_B = shape_B.size();
+        size_t rank = std::max(rank_A, rank_B)
+
+            Shape out_shape{};
+        if (rank > 0) {
+            out_shape.resize(rank, 1);
+
+            size_t i_A = (rank_A > 1) ? rank_A - 1 : 0;
+            size_t i_B = (rank_B > 1) ? rank_B - 1 : 0;
+            for (size_t i = batch_rank - 1; i >= 0; --i) {
+                dim_t dim_A = (i_A >= 0) ? shape_A[i_A--] : 1;
+                dim_t dim_B = (i_B >= 0) ? shape_B[i_B--] : 1;
+                out_shape[i] = std::max(dim_A, dim_B);
+            }
+        }
+
+        return out_shape;
+    }
 
 public:
-    AddNode(const std::string &name) : OpNode(name, Node::Type::ADD) {}
+    AddNode(std::string name, TensTensorNodePtr A, TensTensorNodePtr B)
+        : OpNode(std::move(name), Node::Type::ADD), in_A{std::move(A)}, in_B{std::move(B)} {
+        validate();
+    }
 };
 
-template <typename NodePtr> class MulNode : public OpNode {
-    NodePtr in_A;
-    NodePtr in_B;
+template <typename TensorNodePtr = TensorNode *> class MulNode : public OpNode {
+    TensTensorNodePtr in_A;
+    TensTensorNodePtr in_B;
+
+    void validate() {
+        if (!in_A || !in_B)
+            throw std::invalid_argument("MulNode: input tensors are not provided");
+
+        const auto &shape_A = in_A->shape;
+        const auto &shape_B = in_B->shape;
+
+        size_t rank_A = shape_A.size();
+        size_t rank_B = shape_B.size();
+        size_t min_rank = std::min(rank_A, rank_B);
+
+        if (min_rank > 0) {
+            size_t i_A = rank_A - 1;
+            size_t i_B = rank_B - 1;
+            for (size_t i = min_rank - 1; i >= 0; --i) {
+                dim_t dim_A = shape_A[i_A--];
+                dim_t dim_B = shape_B[i_B--];
+                if (dim_A != dim_B && dim_A != 1 && dim_B != 1)
+                    throw std::invalid_argument(
+                        "MulNode: dimensions are incompatible for broadcasting");
+            }
+        }
+    }
+
+    Shape calc_out_shape() {
+        const Shape &shape_A = in_A->shape;
+        const Shape &shape_B = in_B->shape;
+        size_t rank_A = shape_A.size();
+        size_t rank_B = shape_B.size();
+        size_t rank = std::max(rank_A, rank_B)
+
+            Shape out_shape{};
+        if (rank > 0) {
+            out_shape.resize(rank, 1);
+
+            size_t i_A = (rank_A > 1) ? rank_A - 1 : 0;
+            size_t i_B = (rank_B > 1) ? rank_B - 1 : 0;
+            for (size_t i = batch_rank - 1; i >= 0; --i) {
+                dim_t dim_A = (i_A >= 0) ? shape_A[i_A--] : 1;
+                dim_t dim_B = (i_B >= 0) ? shape_B[i_B--] : 1;
+                out_shape[i] = std::max(dim_A, dim_B);
+            }
+        }
+
+        return out_shape;
+    }
 
 public:
-    MulNode(const std::string &name) : OpNode(name, Node::Type::MUL) {}
+    MulNode(const std::string &name, TensTensorNodePtr A, TensTensorNodePtr B)
+        : OpNode(name, Node::Type::MUL), in_A{A}, in_B{B} {
+        validate();
+    }
 };
 
-template <typename NodePtr> class ReluNode : public OpNode {
-    NodePtr in_A;
+template <typename TensorNodePtr = TensorNode *> class ReluNode : public OpNode {
+    TensTensorNodePtr in_A;
+
+    void validate() {
+        if (!in_A)
+            throw std::invalid_argument("ReluNode: input tensor is not provided");
+    }
+
+    Shape calc_out_shape() {
+        const Shape &shape_A = in_A->shape;
+        size_t rank_A = shape_A.size();
+        size_t rank_B = shape_B.size();
+        size_t rank = std::max(rank_A, rank_B)
+
+            Shape out_shape{};
+        if (rank > 0) {
+            out_shape.resize(rank, 1);
+
+            size_t i_A = (rank_A > 1) ? rank_A - 1 : 0;
+            size_t i_B = (rank_B > 1) ? rank_B - 1 : 0;
+            for (size_t i = batch_rank - 1; i >= 0; --i) {
+                dim_t dim_A = (i_A >= 0) ? shape_A[i_A--] : 1;
+                dim_t dim_B = (i_B >= 0) ? shape_B[i_B--] : 1;
+                out_shape[i] = std::max(dim_A, dim_B);
+            }
+        }
+
+        return out_shape;
+    }
 
 public:
-    ReluNode(const std::string &name) : OpNode(name, Node::Type::RELU) {}
-
-    Agnode_t *draw(Agraph_t *g) const override {
-        Agnode_t *node = draw_this();
-
-        Agnode_t *out_node = out_Y->draw(g);
-        agedge(g, node, out_node, nullptr, 1);
-
-        return node;
+    ReluNode(const std::string &name, TensTensorNodePtr A) : OpNode(name, Node::Type::RELU), in_A{A} {
+        validate();
     }
 };
 

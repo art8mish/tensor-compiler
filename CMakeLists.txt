@@ -7,6 +7,7 @@ pkg_check_modules(GRAPHVIZ REQUIRED libgvc libcgraph)
 
 include_directories(${GRAPHVIZ_INCLUDE_DIRS})
 
+find_package(onnxruntime REQUIRED)
 
 set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set(INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -17,6 +18,7 @@ function(add_exec target)
     target_include_directories(${target} PRIVATE ${INCLUDE_DIR} ${GRAPHVIZ_INCLUDE_DIRS})
     target_compile_features(${target} PRIVATE cxx_std_20)
     target_link_libraries(${target} PRIVATE ${GRAPHVIZ_LIBRARIES})
+    target_link_libraries(${target} PRIVATE onnxruntime::onnxruntime)
 endfunction()
 
 function(add_warnings target)
