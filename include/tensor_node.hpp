@@ -68,7 +68,11 @@ public:
     }
 
     Agnode_t *draw(Agraph_t *g) const override {
-        Agnode_t *node = draw_this(g);
+        Agnode_t *node = get_node(g);
+        if (node != nullptr)
+            return node;
+
+        node = draw_this(g);
         for (const auto &out: output_) {
             Agnode_t *out_node = out->draw(g);
             agedge(g, node, out_node, nullptr, 1);

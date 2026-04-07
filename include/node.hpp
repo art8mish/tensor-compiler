@@ -16,16 +16,24 @@ protected:
         return std::to_string(reinterpret_cast<uintptr_t>(this));
     }
 
-    Agnode_t *draw_this(Agraph_t *g) const {
-        std::string node_id = "n" + id();
+    std::string node_id() const {
+        return "n" + id();
+    }
 
-        Agnode_t *node = agnode(g, const_cast<char *>(node_id.c_str()), 1);
+    Agnode_t *draw_this(Agraph_t *g) const {
+        std::string n_id = node_id();
+        Agnode_t *node = agnode(g, const_cast<char *>(n_id.c_str()), 1);
 
         std::string label_str = type2string(type_) + "\\n(" + name_ + ")";
         agsafeset(node, const_cast<char *>("label"), const_cast<char *>(label_str.c_str()), const_cast<char *>(""));
         agsafeset(node, const_cast<char *>("shape"), const_cast<char *>(type2shape(type_).c_str()), const_cast<char *>(""));
 
         return node;
+    }
+
+    Agnode_t *get_node(Agraph_t *g) const {
+        std::string n_id = node_id();
+        return agnode(g, const_cast<char *>(n_id.c_str()), 0);
     }
 
 public:

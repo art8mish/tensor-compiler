@@ -37,12 +37,20 @@ public:
     }
 
     Agnode_t *draw(Agraph_t *g) const override {
-        Agnode_t *node = draw_this(g);
+        Agnode_t *node = get_node(g);
+        if (node != nullptr)
+            return node;
+
+        node = draw_this(g);
         if (out_Y) {
             Agnode_t *out_node = out_Y->draw(g);
             agedge(g, node, out_node, nullptr, 1);
         }
         return node;
+    }
+
+    const TensorNodePtr output() const {
+        return out_Y;
     }
 };
 
@@ -159,6 +167,10 @@ public:
 
         validate();
     }
+
+    std::array<const TensorNodePtr, 3> inputs() const {
+        return std::array<const TensorNodePtr, 3>{in_X, in_W, in_Bias};
+    }
 };
 
 // Gemm: Y = alpha*A*B + beta*C)
@@ -231,6 +243,11 @@ public:
           beta_{beta}, trA_{transpose_A}, trB_{transpose_B} {
         validate();
     }
+
+    std::array<const TensorNodePtr, 3> inputs() const {
+        return std::array<const TensorNodePtr, 3>{in_A, in_B, in_C};
+    }
+
     // double get_alpha() const {
     //     return alpha_;
     // }
@@ -315,6 +332,10 @@ public:
         : OpNode<TensorNodePtr>(std::move(name), Node::Type::MATMUL), in_A{A}, in_B{B} {
         validate();
     }
+
+    std::array<const TensorNodePtr, 2> inputs() const {
+        return std::array<const TensorNodePtr, 2>{in_A, in_B};
+    }
 };
 
 template <typename TensorNodePtr = TensorNode<Node *, Tensor *> *> class AddNode : public OpNode<TensorNodePtr> {
@@ -369,6 +390,10 @@ public:
     AddNode(std::string name, TensorNodePtr A, TensorNodePtr B)
         : OpNode<TensorNodePtr>(std::move(name), Node::Type::ADD), in_A{A}, in_B{B} {
         validate();
+    }
+
+    std::array<const TensorNodePtr, 2> inputs() const {
+        return std::array<const TensorNodePtr, 2>{in_A, in_B};
     }
 };
 
@@ -425,6 +450,10 @@ public:
         : OpNode<TensorNodePtr>(name, Node::Type::MUL), in_A{A}, in_B{B} {
         validate();
     }
+
+    std::array<const TensorNodePtr, 2> inputs() const {
+        return std::array<const TensorNodePtr, 2>{in_A, in_B};
+    }
 };
 
 template <typename TensorNodePtr = TensorNode<Node *, Tensor *> *> class ReluNode : public OpNode<TensorNodePtr> {
@@ -439,9 +468,14 @@ template <typename TensorNodePtr = TensorNode<Node *, Tensor *> *> class ReluNod
         return in_A->shape();
     }
 
+
 public:
     ReluNode(const std::string &name, TensorNodePtr A) : OpNode<TensorNodePtr>(name, Node::Type::RELU), in_A{A} {
         validate();
+    }
+
+    std::array<const TensorNodePtr, 1> inputs() const {
+        return std::array<const TensorNodePtr, 1>{in_A};
     }
 };
 

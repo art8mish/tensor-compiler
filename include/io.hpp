@@ -9,6 +9,7 @@
 
 namespace tensor_compiler {
 
+
 void draw_graph(const ComputeGraph &graph, const std::string &output_file) {
     GVC_t *gvc = gvContext();
     if (!gvc)

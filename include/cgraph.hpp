@@ -5,12 +5,13 @@
 #include <list>
 #include <memory>
 #include <type_traits>
+#include <ranges>
 
 namespace tensor_compiler {
 
 class ComputeGraph {
-    std::list<std::unique_ptr<Node>> nodes_;
-    std::list<std::unique_ptr<Tensor>> tensors_;
+    std::vector<std::unique_ptr<Node>> nodes_;
+    std::vector<std::unique_ptr<Tensor>> tensors_;
 
 public:
     ComputeGraph() = default;
@@ -33,10 +34,17 @@ public:
         return ptr;
     }
 
-    void draw(Agraph_t *g) const {
-        for (const auto &node : nodes_) {
-            node->draw(g);
-        }
+
+    auto nodes() const {
+        return nodes_ | std::views::transform([](const auto& ptr) -> const Node* {
+            return ptr.get();
+        });
+    }
+
+    auto tensors() const {
+        return tensors_ | std::views::transform([](const auto& ptr) -> const Node* {
+            return ptr.get();
+        });
     }
 
     size_t node_count() const {
@@ -44,6 +52,11 @@ public:
     }
     size_t tensor_count() const {
         return tensors_.size();
+    }
+
+    void draw(Agraph_t *g) const {
+        for (const auto &node : nodes_)
+            node->draw(g);
     }
 };
 
