@@ -1,8 +1,85 @@
-
 #include <gtest/gtest.h>
+#include <vector>
+#include <memory>
+#include <string>
+#include "factory.hpp"
+#include "tensor.hpp"
+#include "cgraph.hpp"
+#include "node.hpp"
+#include "operations.hpp"
+#include "tensor_node.hpp"
 
-#include "compiler.hpp"
+using namespace tensor_compiler;
 
-class TestCompiler : public ::testing::Test {};
+class TestTensorCompiler : public ::testing::Test {
+protected:
+    using TNode = TensorNode<Node *, Tensor *>;
+    using TNodePtr = TNode *;
+    
+    ComputeGraph graph;
+};
 
-TEST_F(TestCompiler, BasicIdentities) {}
+
+TEST_F(TestTensorCompiler, TensorAllocation) {
+    Shape shape = {2, 3};
+    Tensor t(shape, DataType::FLOAT32);
+    
+    EXPECT_EQ(t.size(), 6);
+    EXPECT_TRUE(t.empty());
+    
+    std::vector<float> data = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f};
+    t.set_data(data);
+    
+    EXPECT_FALSE(t.empty());
+    EXPECT_EQ(t.bytes(), 6 * sizeof(float));
+    
+    const float* raw_ptr = t.data<float>();
+    EXPECT_FLOAT_EQ(raw_ptr[0], 1.0f);
+    EXPECT_FLOAT_EQ(raw_ptr[5], 6.0f);
+}
+
+TEST_F(TestTensorCompiler, TensorReshape) {
+    Tensor t({4, 4}, DataType::INT32);
+    std::vector<int32_t> data(16, 1);
+    t.set_data(data);
+
+    EXPECT_NO_THROW(t.reshape({2, 8}));
+    EXPECT_EQ(t.shape()[0], 2);
+    EXPECT_EQ(t.shape()[1], 8);
+    
+    EXPECT_THROW(t.reshape({2, 2}), std::invalid_argument);
+}
+
+TEST_F(TestTensorCompiler, TensorTypeMismatch) {
+    Tensor t({1}, DataType::FLOAT32);
+    std::vector<int32_t> wrong_data = {1};
+
+    EXPECT_THROW(t.set_data(wrong_data), std::runtime_error);
+}
+
+TEST_F(TestTensorCompiler, GraphConnectivity) {
+    Shape in_shape {1, 2};
+    Tensor* in_t = graph.add_tensor(in_shape, DataType::FLOAT32);
+    TNodePtr in_node = graph.add_node<TNode>("input_node", in_t);
+    
+    auto* relu = graph.add_node<ReluNode<TNodePtr>>("relu_op", in_node);
+    
+    in_node->add_output(relu);
+    
+    Shape out_shape {1, 2};
+    Tensor* out_t = graph.add_tensor(out_shape, DataType::FLOAT32);
+    TNodePtr out_node = graph.add_node<TNode>("output_node", out_t);
+    
+    relu->set_out_tensor(out_node);
+    out_node->set_input(relu);
+    
+    EXPECT_EQ(in_node->output().size(), 1);
+    EXPECT_EQ(*(in_node->output().begin()), relu);
+    EXPECT_EQ(out_node->input(), relu);
+    EXPECT_EQ(relu->name(), "relu_op");
+}
+
+TEST_F(TestTensorCompiler, FactoryOnnxLoadingFailure) {
+    ComputeGraphFactory factory;
+    EXPECT_THROW(factory.from_onnx("non_existent_model.onnx"), std::runtime_error);
+}

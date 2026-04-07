@@ -2,31 +2,31 @@
 #include <iostream>
 #include <memory>
 #include <string>
-#include <vector>
+#include <unordered_set>
 
+#include "node.hpp"
 #include "node.hpp"
 #include "tensor.hpp"
 #include <graphviz/cgraph.h>
-#include <gvc.h>
+#include <graphviz/gvc.h>
 
 namespace tensor_compiler {
 
-template <typename NodePtr = Node *, typename TensorPtr = Tensor *> 
-class TensorNode : public Node {
+template <typename NodePtr = Node *, typename TensorPtr = Tensor *> class TensorNode : public Node {
     TensorPtr tensor_{};
 
     NodePtr input_{};
-    std::vector<NodePtr> output_{};
+    std::unordered_set<NodePtr> output_{};
 
     void check_tensor() const {
         if (!tensor_)
-            throw std::logic_error("Tensor is not initialized")
+            throw std::logic_error("Tensor is not initialized");
     }
 
 public:
     TensorNode(std::string name, TensorPtr tensor = {}, NodePtr input = {},
-               std::vector<NodePtr> output = {})
-        : Node(name, Node::Type::TENSOR), tensor_(std::move(tensor)), input_(std::move(input)),
+               std::unordered_set<NodePtr> output = {})
+        : Node(name, Node::Type::TENSOR), tensor_(tensor), input_(input),
           output_(std::move(output)) {}
 
     const Shape &shape() const {
@@ -47,24 +47,33 @@ public:
         return input_;
     }
 
-    const std::vector<NodePtr> &output() const {
+    const std::unordered_set<NodePtr> &output() const {
         return output_;
     }
 
     void set_tensor(TensorPtr tensor) {
         if (tensor_)
             throw std::logic_error("Tensor is already tied");
-        tensor_ = std::move(tensor);
+        tensor_ = tensor;
     }
 
     void set_input(NodePtr node) {
         if (input_)
             throw std::logic_error("Input node is already tied");
-        input_ = std::move(node);
+        input_ = node;
     }
 
     void add_output(NodePtr output) {
-        output_.push_back(std::move(output));
+        output_.insert(output);
+    }
+
+    Agnode_t *draw(Agraph_t *g) const override {
+        Agnode_t *node = draw_this(g);
+        for (const auto &out: output_) {
+            Agnode_t *out_node = out->draw(g);
+            agedge(g, node, out_node, nullptr, 1);
+        }
+        return node;
     }
 };
 

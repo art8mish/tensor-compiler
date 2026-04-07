@@ -3,11 +3,15 @@ set(TARGET tensor-compiler)
 project(${TARGET} LANGUAGES CXX)
 
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(GRAPHVIZ REQUIRED libgvc libcgraph)
+pkg_check_modules(GRAPHVIZ REQUIRED IMPORTED_TARGET libgvc libcgraph)
 
 include_directories(${GRAPHVIZ_INCLUDE_DIRS})
 
-find_package(onnxruntime REQUIRED)
+
+find_package(Protobuf REQUIRED)
+find_library(ONNX_LIBRARY NAMES onnx REQUIRED)
+find_path(ONNX_INCLUDE_DIR NAMES onnx/onnx_pb.h REQUIRED)
+find_library(ONNX_PROTO_LIBRARY NAMES onnx_proto REQUIRED)
 
 set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set(INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -15,10 +19,11 @@ set(TESTS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tests)
 
 function(add_exec target)
     add_executable(${target} ${ARGN})
-    target_include_directories(${target} PRIVATE ${INCLUDE_DIR} ${GRAPHVIZ_INCLUDE_DIRS})
+    target_include_directories(${target} PRIVATE ${INCLUDE_DIR} ${GRAPHVIZ_INCLUDE_DIRS} ${ONNX_INCLUDE_DIR} ${Protobuf_INCLUDE_DIRS})
     target_compile_features(${target} PRIVATE cxx_std_20)
-    target_link_libraries(${target} PRIVATE ${GRAPHVIZ_LIBRARIES})
-    target_link_libraries(${target} PRIVATE onnxruntime::onnxruntime)
+    target_compile_definitions(${target} PRIVATE ONNX_ML)
+    target_link_libraries(${target} PRIVATE ${GRAPHVIZ_LIBRARIES} ${ONNX_LIBRARY} ${ONNX_PROTO_LIBRARY} ${Protobuf_LIBRARIES})
+    target_link_libraries(${target} PRIVATE ${ONNX_LIBRARY} ${ONNX_PROTO_LIBRARY} ${Protobuf_LIBRARIES})
 endfunction()
 
 function(add_warnings target)
