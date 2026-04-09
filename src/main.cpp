@@ -1,6 +1,6 @@
 
 #include "factory.hpp"
-#include "io.hpp"
+#include "viz/cg_draw.hpp"
 #include <iostream>
 #include <ctime>
 
@@ -24,7 +24,7 @@ int main() {
         std::cout << "Runtime: " << duration << " us" << std::endl;
 #endif
         std::string graph_file = "results/graph.png";
-        tensor_compiler::draw_graph(*graph, graph_file);
+        tensor_compiler::draw_compute_graph(*graph, graph_file);
 
         return 0;
     } catch (const std::exception &e) {

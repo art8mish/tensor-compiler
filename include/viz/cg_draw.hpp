@@ -10,7 +10,7 @@
 namespace tensor_compiler {
 
 
-void draw_graph(const ComputeGraph &graph, const std::string &output_file) {
+void draw_compute_graph(const ComputeGraph &graph, const std::string &output_file) {
     GVC_t *gvc = gvContext();
     if (!gvc)
         throw std::runtime_error("Failed to create Graphviz context");

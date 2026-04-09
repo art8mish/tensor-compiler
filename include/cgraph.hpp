@@ -1,13 +1,17 @@
 #pragma once
 
-#include "node.hpp"
-#include "tensor.hpp"
+#include "nodes/node.hpp"
+#include "tensor/tensor.hpp"
 #include <list>
 #include <memory>
 #include <type_traits>
 #include <ranges>
 
 namespace tensor_compiler {
+
+using TNode = TensorNode<Node *, Tensor *>;
+using TNodePtr = TNode *;
+using OpNodePtr = OpNode<TNodePtr> *;
 
 class ComputeGraph {
     std::vector<std::unique_ptr<Node>> nodes_;
@@ -42,7 +46,7 @@ public:
     }
 
     auto tensors() const {
-        return tensors_ | std::views::transform([](const auto& ptr) -> const Node* {
+        return tensors_ | std::views::transform([](const auto& ptr) -> const Tensor* {
             return ptr.get();
         });
     }

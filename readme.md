@@ -13,13 +13,30 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ```
 
+Dependences:
 ```shell
 sudo apt update
 sudo apt install build-essential cmake pkg-config
+```
+
+- ONNX
+```shell
+sudo apt install protobuf-compiler libprotobuf-dev libonnx-dev
+```
+
+- Graphviz:
+```shell
 sudo apt install graphviz libgraphviz-dev
-sudo apt install protobuf-compiler libprotobuf-dev
-sudo apt install libonnx-dev
+```
+
+- GoggleTest:
+```shell
 sudo apt install libgtest-dev
+```
+
+- LLVM:
+```shell
+sudo apt-get install -y cmake ninja-build clang lld
 ```
 
 ## ONNX Format

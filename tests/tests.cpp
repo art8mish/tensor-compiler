@@ -3,11 +3,11 @@
 #include <memory>
 #include <string>
 #include "factory.hpp"
-#include "tensor.hpp"
+#include "tensor/tensor.hpp"
 #include "cgraph.hpp"
-#include "node.hpp"
-#include "operations.hpp"
-#include "tensor_node.hpp"
+#include "nodes/node.hpp"
+#include "nodes/operations.hpp"
+#include "nodes/tensor_node.hpp"
 
 using namespace tensor_compiler;
 

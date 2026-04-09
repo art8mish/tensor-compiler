@@ -4,9 +4,8 @@
 #include <string>
 #include <unordered_set>
 
-#include "node.hpp"
-#include "node.hpp"
-#include "tensor.hpp"
+#include "nodes/node.hpp"
+#include "tensor/tensor.hpp"
 #include <graphviz/cgraph.h>
 #include <graphviz/gvc.h>
 
@@ -23,10 +22,11 @@ template <typename NodePtr = Node *, typename TensorPtr = Tensor *> class Tensor
             throw std::logic_error("Tensor is not initialized");
     }
 
+
 public:
     TensorNode(std::string name, TensorPtr tensor = {}, NodePtr input = {},
                std::unordered_set<NodePtr> output = {})
-        : Node(name, Node::Type::TENSOR), tensor_(tensor), input_(input),
+        : Node(name, NodeType::TENSOR), tensor_(tensor), input_(input),
           output_(std::move(output)) {}
 
     const Shape &shape() const {
@@ -68,12 +68,14 @@ public:
     }
 
     Agnode_t *draw(Agraph_t *g) const override {
-        Agnode_t *node = get_node(g);
+        Agnode_t *node = (tensor_) ? tensor_->get_node(g) : get_node(g);
         if (node != nullptr)
             return node;
 
-        node = draw_this(g);
-        for (const auto &out: output_) {
+        std::cout << "Drawing " << name() <<  "\n";
+        node = (tensor_) ? tensor_->draw(g, name_) : Node::draw(g);
+        for (const auto &out : output_) {
+            std::cout << "Out " << out->name() << " " << out <<  "\n";
             Agnode_t *out_node = out->draw(g);
             agedge(g, node, out_node, nullptr, 1);
         }

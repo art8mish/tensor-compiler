@@ -1,10 +1,10 @@
 #pragma once
 
 #include "cgraph.hpp"
-#include "node.hpp"
-#include "operations.hpp"
-#include "tensor.hpp"
-#include "tensor_node.hpp"
+#include "nodes/node.hpp"
+#include "nodes/operations.hpp"
+#include "nodes/tensor_node.hpp"
+#include "tensor/tensor.hpp"
 #include <cassert>
 #include <fstream>
 #include <memory>
@@ -16,10 +16,6 @@
 namespace tensor_compiler {
 
 class ComputeGraphFactory {
-    using TNode = TensorNode<Node *, Tensor *>;
-    using TNodePtr = TNode *;
-    using OpNodePtr = OpNode<TNodePtr> *;
-
     static DataType onnx_dtype(int32_t onnx_type) {
         switch (onnx_type) {
         case onnx::TensorProto::FLOAT:
@@ -42,10 +38,15 @@ class ComputeGraphFactory {
         }
     }
 
+    // template <typename T, typename ProtobufField>
+    // void fill_tensor_data_impl(Tensor &tensor, const ProtobufField &field) {
+    //     std::vector<T> data(field.begin(), field.end());
+    //     tensor.set_data<T>(data);
+    // }
+
     template <typename T, typename ProtobufField>
-    void fill_tensor_data_impl(Tensor &tensor, const ProtobufField &field) {
-        std::vector<T> data(field.begin(), field.end());
-        tensor.set_data(data);
+    void fill_tensor_data(Tensor &tensor, const ProtobufField &field) {
+        tensor.set_data<T>(field.begin(), field.end());
     }
 
     void fill_tensor(Tensor &tensor, const onnx::TensorProto &initializer) {
@@ -62,16 +63,16 @@ class ComputeGraphFactory {
 
         switch (dtype) {
         case DataType::FLOAT32:
-            fill_tensor_data_impl<float>(tensor, initializer.float_data());
+            fill_tensor_data<float>(tensor, initializer.float_data());
             break;
         case DataType::FLOAT64:
-            fill_tensor_data_impl<double>(tensor, initializer.double_data());
+            fill_tensor_data<double>(tensor, initializer.double_data());
             break;
         case DataType::INT32:
-            fill_tensor_data_impl<int32_t>(tensor, initializer.int32_data());
+            fill_tensor_data<int32_t>(tensor, initializer.int32_data());
             break;
         case DataType::INT64:
-            fill_tensor_data_impl<int64_t>(tensor, initializer.int64_data());
+            fill_tensor_data<int64_t>(tensor, initializer.int64_data());
             break;
         default:
             throw std::runtime_error("Tensor data type is not supported");
@@ -79,7 +80,7 @@ class ComputeGraphFactory {
     }
 
     OpNodePtr handle_conv(ComputeGraph &cgraph, const onnx::NodeProto &node_proto,
-                          const std::string &node_name, const std::vector<TNodePtr > &inputs) {
+                          const std::string &node_name, const std::vector<TNodePtr> &inputs) {
         if (inputs.size() < 2)
             throw std::runtime_error("Conv: need at least X and W inputs");
 
@@ -108,13 +109,13 @@ class ComputeGraphFactory {
         TNodePtr W = inputs[1];
         TNodePtr B = (inputs.size() > 2) ? inputs[2] : nullptr;
 
-        return cgraph.add_node<ConvNode<TNodePtr >>(node_name, std::move(kernel_shape), X, W, B,
-                                                  std::move(strides), std::move(dilations),
-                                                  std::move(pads), group);
+        return cgraph.add_node<ConvNode<TNodePtr>>(node_name, std::move(kernel_shape), X, W, B,
+                                                   std::move(strides), std::move(dilations),
+                                                   std::move(pads), group);
     }
 
     OpNodePtr handle_gemm(ComputeGraph &cgraph, const onnx::NodeProto &node_proto,
-                          const std::string &node_name, const std::vector<TNodePtr > &inputs) {
+                          const std::string &node_name, const std::vector<TNodePtr> &inputs) {
         double alpha = 1.0, beta = 1.0;
         bool transA = false, transB = false;
 
@@ -129,33 +130,33 @@ class ComputeGraphFactory {
                 transB = (attr.i() != 0);
         }
 
-        return cgraph.add_node<GemmNode<TNodePtr >>(node_name, inputs[0], inputs[1],
-                                                  (inputs.size() > 2 ? inputs[2] : nullptr), alpha,
-                                                  beta, transA, transB);
+        return cgraph.add_node<GemmNode<TNodePtr>>(node_name, inputs[0], inputs[1],
+                                                   (inputs.size() > 2 ? inputs[2] : nullptr), alpha,
+                                                   beta, transA, transB);
     }
 
     OpNodePtr handle_matmul(ComputeGraph &cgraph, const onnx::NodeProto &,
-                            const std::string &node_name, const std::vector<TNodePtr > &inputs) {
-        return cgraph.add_node<MatMulNode<TNodePtr >>(node_name, inputs[0], inputs[1]);
+                            const std::string &node_name, const std::vector<TNodePtr> &inputs) {
+        return cgraph.add_node<MatMulNode<TNodePtr>>(node_name, inputs[0], inputs[1]);
     }
 
     OpNodePtr handle_relu(ComputeGraph &cgraph, const onnx::NodeProto &,
-                          const std::string &node_name, const std::vector<TNodePtr > &inputs) {
-        return cgraph.add_node<ReluNode<TNodePtr >>(node_name, inputs[0]);
+                          const std::string &node_name, const std::vector<TNodePtr> &inputs) {
+        return cgraph.add_node<ReluNode<TNodePtr>>(node_name, inputs[0]);
     }
 
     OpNodePtr handle_add(ComputeGraph &cgraph, const onnx::NodeProto &,
-                         const std::string &node_name, const std::vector<TNodePtr > &inputs) {
-        return cgraph.add_node<AddNode<TNodePtr >>(node_name, inputs[0], inputs[1]);
+                         const std::string &node_name, const std::vector<TNodePtr> &inputs) {
+        return cgraph.add_node<AddNode<TNodePtr>>(node_name, inputs[0], inputs[1]);
     }
 
     OpNodePtr handle_mul(ComputeGraph &cgraph, const onnx::NodeProto &,
-                         const std::string &node_name, const std::vector<TNodePtr > &inputs) {
-        return cgraph.add_node<MulNode<TNodePtr >>(node_name, inputs[0], inputs[1]);
+                         const std::string &node_name, const std::vector<TNodePtr> &inputs) {
+        return cgraph.add_node<MulNode<TNodePtr>>(node_name, inputs[0], inputs[1]);
     }
 
     OpNodePtr create_op_node(ComputeGraph &cgraph, const onnx::NodeProto &node_proto,
-                             const std::string &node_name, const std::vector<TNodePtr > &inputs) {
+                             const std::string &node_name, const std::vector<TNodePtr> &inputs) {
         const std::string &op_type = node_proto.op_type();
         if (op_type == "Conv")
             return handle_conv(cgraph, node_proto, node_name, inputs);
@@ -172,8 +173,9 @@ class ComputeGraphFactory {
         throw std::runtime_error("Unsupported operation: " + op_type);
     }
 
-    TNodePtr process_onnx_valueinfo(ComputeGraph &cgraph, const onnx::ValueInfoProto &valueinfo_proto,
-                                  const std::string &name) {
+    TNodePtr process_onnx_valueinfo(ComputeGraph &cgraph,
+                                    const onnx::ValueInfoProto &valueinfo_proto,
+                                    const std::string &name) {
         Shape shape{};
         const auto &type = valueinfo_proto.type().tensor_type();
         for (const auto &dim : type.shape().dim()) {
@@ -185,7 +187,7 @@ class ComputeGraphFactory {
     }
 
     TNodePtr process_onnx_tensor(ComputeGraph &cgraph, const onnx::TensorProto &tensor_proto,
-                               const std::string &name) {
+                                 const std::string &name) {
         Shape shape{};
         for (auto dim : tensor_proto.dims())
             shape.push_back(static_cast<dim_t>(dim));
@@ -223,7 +225,7 @@ public:
                 inputs.push_back(tensor_map.at(in_name));
 
             OpNodePtr op_node = create_op_node(*cgraph, node_proto, node_name, inputs);
-            for (auto in : inputs)
+            for (auto &in : inputs)
                 in->add_output(op_node);
 
             const std::string &out_name = node_proto.output(0);

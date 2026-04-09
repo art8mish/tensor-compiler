@@ -11,71 +11,16 @@
 #include <type_traits>
 #include <vector>
 
+#include <viz/drawable.hpp>
+#include <tensor/dtype.hpp>
+
 namespace tensor_compiler {
-
-enum class DataType { FLOAT32, FLOAT64, INT32, INT64, INT8, UINT8, BOOL, UNDEFINED };
-
-size_t get_dtype_size(DataType dtype) {
-    switch (dtype) {
-    case DataType::FLOAT32:
-        return sizeof(float);
-    case DataType::FLOAT64:
-        return sizeof(double);
-    case DataType::INT32:
-        return sizeof(int32_t);
-    case DataType::INT64:
-        return sizeof(int64_t);
-    case DataType::INT8:
-    case DataType::UINT8:
-        return sizeof(int8_t);
-    case DataType::BOOL:
-        return sizeof(bool);
-    default:
-        throw std::invalid_argument("Unsupported type");
-    }
-}
-
-template <typename T> constexpr DataType get_dtype() {
-    if constexpr (std::is_same_v<T, float>)
-        return DataType::FLOAT32;
-    else if constexpr (std::is_same_v<T, double>)
-        return DataType::FLOAT64;
-    else if constexpr (std::is_same_v<T, int32_t>)
-        return DataType::INT32;
-    else if constexpr (std::is_same_v<T, int64_t>)
-        return DataType::INT64;
-    else if constexpr (std::is_same_v<T, int8_t>)
-        return DataType::INT8;
-    else if constexpr (std::is_same_v<T, uint8_t>)
-        return DataType::UINT8;
-    else if constexpr (std::is_same_v<T, bool>)
-        return DataType::BOOL;
-    else {
-        static_assert(!sizeof(T), "Unsupported type for tensor");
-        return DataType::UNDEFINED;
-    }
-}
-
-std::string dtype_to_string(DataType dtype) {
-    switch (dtype) {
-    case DataType::FLOAT32:
-        return "float32";
-    case DataType::FLOAT64:
-        return "float64";
-    case DataType::INT32:
-        return "int32";
-    case DataType::INT64:
-        return "int64";
-    default:
-        return "unknown";
-    }
-}
 
 using dim_t = int64_t;
 const dim_t DYNAMIC_DIM = -1;
 using Shape = std::vector<dim_t>;
 
-class Tensor {
+class Tensor : public Drawable {
     Shape shape_;
     DataType dtype_;
     std::optional<std::vector<uint8_t>> data_;
@@ -112,6 +57,57 @@ class Tensor {
     bool with_data() const noexcept {
         return data_.has_value();
     }
+
+    template <typename T>
+    Agnode_t* draw_impl(Agraph_t* g, std::string name = "") const {
+        std::string shape_str = "[";
+        for (size_t i = 0; i < shape_.size(); ++i) {
+            shape_str += std::to_string(shape_[i]) + (i == shape_.size() - 1 ? "" : ", ");
+        }
+        shape_str += "]";
+
+        std::string html = "<TABLE BORDER=\"0\" CELLBORDER=\"1\" CELLSPACING=\"0\" CELLPADDING=\"4\">";
+        html += "<TR><TD COLSPAN=\"4\" BGCOLOR=\"#EEEEEE\"><B>Tensor";
+        if (!name.empty())
+            html += " (" + name + ")";
+        html += "</B></TD></TR>";
+        html += "<TR><TD COLSPAN=\"4\">DType: " + 
+                dtype_to_string(dtype_) + " | Shape: " + shape_str + "</TD></TR>";
+
+        const T* tensor_data = data<T>();
+        if (tensor_data != nullptr && !empty()) {
+            size_t total_elements = size();
+            size_t limit = 16;
+            size_t to_draw = std::min(total_elements, limit);
+
+            html += "<TR>";
+            for (size_t i = 0; i < to_draw; ++i) {
+                if (i > 0 && i % 4 == 0) 
+                    html += "</TR><TR>";
+
+                html += "<TD>";
+                if constexpr (std::is_same_v<T, bool>)
+                    html += (tensor_data[i] ? "true" : "false");
+                else
+                    html += std::to_string(+tensor_data[i]);
+                html += "</TD>";
+            }
+
+            if (total_elements > limit) {
+                html += "</TR><TR><TD COLSPAN=\"4\" BGCOLOR=\"#F5F5F5\">... and " + 
+                        std::to_string(total_elements - limit) + " more</TD>";
+            }
+            html += "</TR>";
+        } else {
+            std::string status = (is_dynamic()) ? "Dynamic" : "Empty";
+            html += "<TR><TD COLSPAN=\"4\">"+ status + "</TD></TR>";
+        }
+
+        html += "</TABLE>";
+        std::string html_label = html;
+        return Drawable::draw(g, html_label, "none");
+    }
+
 
 public:
     Tensor() = default;
@@ -234,6 +230,26 @@ public:
 
         T *dest = reinterpret_cast<T *>(data_->data());
         std::copy(begin, end, dest);
+    }
+
+    
+
+    Agnode_t* draw(Agraph_t* g, std::string name) const {
+        switch (dtype_) {
+            case DataType::FLOAT32: return draw_impl<DataType_t<DataType::FLOAT32>>(g, name);
+            case DataType::FLOAT64: return draw_impl<DataType_t<DataType::FLOAT64>>(g, name);
+            case DataType::INT32:   return draw_impl<DataType_t<DataType::INT32>>(g, name);
+            case DataType::INT64:   return draw_impl<DataType_t<DataType::INT64>>(g, name);
+            case DataType::INT8:   return draw_impl<DataType_t<DataType::INT8>>(g, name);
+            case DataType::UINT8:   return draw_impl<DataType_t<DataType::UINT8>>(g, name);
+            case DataType::BOOL:   return draw_impl<DataType_t<DataType::BOOL>>(g, name);
+            default:
+                return draw_impl<int32_t>(g, name); 
+        }
+    }
+
+    Agnode_t* draw(Agraph_t* g) const override {
+        return draw(g, "");
     }
 };
 
