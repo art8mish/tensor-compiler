@@ -1,17 +1,23 @@
 #pragma once
 
-#include <unordered_map>
-#include <vector>
-#include "mlir_compute_graph.hpp"
 #include "nodes/operations.hpp"
 #include "nodes/tensor_node.hpp"
+#include "nodes/node.hpp"
+#include "nodes/node.hpp"
+#include "mlir_ext/graph.hpp"
+
+#include <unordered_map>
+#include <vector>
 
 // MLIR includes
 #include "mlir/IR/Builders.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
+#include "mlir/Dialect/Linalg/Utils/Utils.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+
 
 namespace tensor_compiler {
 
@@ -40,7 +46,7 @@ public:
         // }
     }
 
-    mlir::RankedTensorType get_tensor_type(const TNodePtr tensor) {
+    mlir::RankedTensorType get_tensor_type(const TensorNode * tensor) {
         std::vector<int64_t> shape;
         for (auto d : tensor->shape()) 
             shape.push_back(d == DYNAMIC_DIM ? mlir::ShapedType::kDynamic : d);
@@ -48,30 +54,30 @@ public:
     }
 
     template <typename T>
-    std::vector<T> cast_data(const TNodePtr tensor) {
-        const auto& tensor = tensor->tensor();
-        std::vector<T> promoted;
-        promoted.reserve(tensor->size());
+    std::vector<T> cast_data(const TensorNode * tensor_node) {
+        const auto& tensor = tensor_node->tensor();
+        std::vector<T> casted;
+        casted.reserve(tensor->size());
 
         auto convert = [&](auto* ptr) {
             for (size_t i = 0; i < tensor->size(); ++i) 
-                promoted.push_back(static_cast<T>(ptr[i]));
+                casted.push_back(static_cast<T>(ptr[i]));
         };
 
         switch (tensor->dtype()) {
-            case DataType::FLOAT32: convert(tensor->data<DataType_t<DataType::FLOAT32>>()); break;
-            case DataType::FLOAT64: convert(tensor->data<DataType_t<DataType::FLOAT64>>()); break;
-            case DataType::INT64:   convert(tensor->data<DataType_t<DataType::INT64>>()); break;
-            case DataType::INT32:   convert(tensor->data<DataType_t<DataType::INT32>>()); break;
-            case DataType::INT8:    convert(tensor->data<DataType_t<DataType::INT8>>()); break;
-            case DataType::UINT8:   convert(tensor->data<DataType_t<DataType::UINT8>>()); break;
-            case DataType::BOOL:    convert(tensor->data<DataType_t<DataType::BOOL>>()); break;
+            case DataType::FLOAT32: convert(tensor->template data<DataType_t<DataType::FLOAT32>>()); break;
+            case DataType::FLOAT64: convert(tensor->template data<DataType_t<DataType::FLOAT64>>()); break;
+            case DataType::INT64:   convert(tensor->template data<DataType_t<DataType::INT64>>()); break;
+            case DataType::INT32:   convert(tensor->template data<DataType_t<DataType::INT32>>()); break;
+            case DataType::INT8:    convert(tensor->template data<DataType_t<DataType::INT8>>()); break;
+            case DataType::UINT8:   convert(tensor->template data<DataType_t<DataType::UINT8>>()); break;
+            case DataType::BOOL:    convert(tensor->template data<DataType_t<DataType::BOOL>>()); break;
             default: break;
         }
-        return promoted;
+        return casted;
     }
 
-    mlir::Value tensor_value(const TNodePtr tensor) {
+    mlir::Value tensor_value(const TensorNode * tensor) {
         mlir::RankedTensorType type = get_tensor_type(tensor);
         std::vector<float> data = cast_data<float>(tensor);
         mlir::DenseElementsAttr attr = mlir::DenseElementsAttr::get(type, llvm::ArrayRef<float>(data));
@@ -83,26 +89,50 @@ public:
         // } else {
         //     ...
         // }
-        return builder_.create<mlir::arith::ConstantOp>(builder_.getUnknownLoc(), attr);
+        return mlir::arith::ConstantOp::create(builder_, builder_.getUnknownLoc(), attr);
     }
 
-    
+    void finalize(const Node* output_node) {
+        mlir::Location loc = builder_.getUnknownLoc();
+        
+        auto func = llvm::dyn_cast<mlir::func::FuncOp>(builder_.getInsertionBlock()->getParentOp());
+
+        mlir::ValueRange final_value {};
+        
+        if (value_map_.contains(output_node))
+            final_value = mlir::ValueRange{value_map_.at(output_node)};
+
+        if (func) {
+            auto new_type = builder_.getFunctionType(
+                func.getArgumentTypes(),
+                final_value
+            );
+            func.setType(new_type);
+        }
+
+        mlir::func::ReturnOp::create(
+            builder_,
+            loc,
+            final_value
+        );
+    }
 
     void process_node(const Node* node) {
         mlir::Location loc = builder_.getUnknownLoc();
 
         if (node->type() == NodeType::TENSOR) {
-            const TNodePtr t_node = static_cast<const TNodePtr>(node);
+            const TensorNode * t_node = dynamic_cast<const TensorNode *>(node);
             if (t_node->tensor() && !t_node->tensor()->empty() && !value_map_.contains(node))
                 value_map_[node] = tensor_value(t_node); 
             return;
         }
 
-        const OpNodePtr op_node = static_cast<const OpNodePtr>(node);
-        const TensorNodePtr out_tensor = op_node->output();
+        const OpNode *op_node = static_cast<const OpNode *>(node);
+        const TensorNode *out_tensor = op_node->output();
         mlir::RankedTensorType out_tensor_type = get_tensor_type(out_tensor);
         
-        mlir::Value out_format = builder_.create<mlir::tensor::EmptyOp>(
+        mlir::Value out_format = mlir::tensor::EmptyOp::create(
+            builder_,
             loc, out_tensor_type.getShape(), out_tensor_type.getElementType());
 
         auto node_type = node->type();
@@ -112,12 +142,12 @@ public:
         switch (node_type) {
             case NodeType::RELU: {
                 mlir::Value in_tensor = value_map_.at(inputs[0]);
-                result = builder_.create<mlir::linalg::MapOp>(loc, mlir::ValueRange{in_tensor}, out_format,
+                result = mlir::linalg::MapOp::create(builder_, loc, mlir::ValueRange{in_tensor}, out_format,
                     [&](mlir::OpBuilder &b, mlir::Location l, mlir::ValueRange args) {
-                        auto zero = b.create<mlir::arith::ConstantOp>(l, b.getFloatAttr(args[0].getType(), 0.0));
-                        auto max = b.create<mlir::arith::MaximumFOp>(l, args[0], zero);
-                        b.create<mlir::linalg::YieldOp>(l, max);
-                    }).getResult(0);
+                    auto zero = mlir::arith::ConstantOp::create(b, l, b.getFloatAttr(args[0].getType(), 0.0));
+                    auto max = mlir::arith::MaximumFOp::create(b, l, args[0], zero);
+                    mlir::linalg::YieldOp::create(b, l, max.getResult());
+                })->getResult(0); 
                 break;
             }
 
@@ -133,33 +163,62 @@ public:
                 mlir::Value in_A = value_map_.at(inputs[0]);
                 mlir::Value in_B = value_map_.at(inputs[1]);
                 if (node_type == NodeType::ADD)
-                    result = builder_.create<mlir::linalg::AddOp>(loc, 
-                        mlir::ValueRange{in_A, in_B}, mlir::ValueRange{out_format}).getResult(0);
+                    result = mlir::linalg::AddOp::create(
+                        builder_, 
+                        loc,
+                        {out_format.getType()},
+                        mlir::ValueRange{in_A, in_B}, 
+                        mlir::ValueRange{out_format}
+                    ).getResult(0);
                 else if (node_type == NodeType::MUL)
-                    result = builder_.create<mlir::linalg::MulOp>(loc, 
-                        mlir::ValueRange{in_A, in_B}, mlir::ValueRange{out_format}).getResult(0);
+                    result = mlir::linalg::MulOp::create(
+                        builder_, 
+                        loc, 
+                        {out_format.getType()}, 
+                        mlir::ValueRange{in_A, in_B}, 
+                        mlir::ValueRange{out_format}
+                    ).getResult(0);
                 else
-                    result = builder_.create<mlir::linalg::MatmulOp>(loc, 
-                        mlir::ValueRange{in_A, in_B}, mlir::ValueRange{out_format}).getResult(0);
+                    result = mlir::linalg::MatmulOp::create(
+                        builder_, 
+                        loc, 
+                        {out_format.getType()}, 
+                        mlir::ValueRange{in_A, in_B}, 
+                        mlir::ValueRange{out_format}
+                    ).getResult(0);
                 break;
             }
 
             case NodeType::CONV: {
-                auto* convNode = static_cast<const ConvNode<TensorNodePtr>*>(node);
+                auto* convNode = static_cast<const ConvNode *>(node);
                 mlir::Value X = value_map_.at(inputs[0]);
                 mlir::Value W = value_map_.at(inputs[1]);
                 
                 auto strides = builder_.getI64ArrayAttr(convNode->getStrides());
                 auto dilations = builder_.getI64ArrayAttr(convNode->getDilations());
 
-                result = builder_.create<mlir::linalg::Conv2DNhwcFhwcOp>(
-                    loc, mlir::ValueRange{X, W}, mlir::ValueRange{out_format}, strides, dilations
+                llvm::SmallVector<mlir::NamedAttribute, 2> attrs;
+                attrs.push_back(builder_.getNamedAttr("strides", strides));
+                attrs.push_back(builder_.getNamedAttr("dilations", dilations));
+
+
+                result = mlir::linalg::Conv2DNchwFchwOp::create(
+                    builder_, 
+                    loc,
+                    {out_format.getType()},
+                    mlir::ValueRange{X, W}, 
+                    mlir::ValueRange{out_format}
                 ).getResult(0);
 
                 if (inputs.size() > 2 && inputs[2]) {
                     mlir::Value bias = value_map_.at(inputs[2]);
-                    result = builder_.create<mlir::linalg::AddOp>(loc, 
-                        mlir::ValueRange{result, bias}, mlir::ValueRange{result}).getResult(0);
+                    result = mlir::linalg::AddOp::create(
+                        builder_, 
+                        loc,
+                        {result.getType()},
+                        mlir::ValueRange{result, bias}, 
+                        mlir::ValueRange{result}
+                    ).getResult(0);
                 }
                 break;
             }
@@ -217,21 +276,21 @@ public:
     //             mlir::Value result_op = b.create<OpT>(l, args[0], args[1]);
     //             b.create<mlir::linalg::YieldOp>(l, result_op);
     //         }
-    //     ).getResult(0);
+    //     ).getResult()[0];
     // }
 
     // void process_node(const Node* node) {
     //     mlir::Location loc = builder_.getUnknownLoc();
 
     //     if (node->type() == NodeType::TENSOR) {
-    //         const TNodePtr t_node = static_cast<const TNodePtr>(node);
+    //         const TensorNode * t_node = static_cast<const TensorNode *>(node);
     //         const TensorPtr tensor = t_node->tensor();
     //         if (tensor && !tensor->empty() && !value_map_.contains(node))
     //             value_map_[node] = tensor_value(t_node); 
     //         return;
     //     }
 
-    //     const OpNodePtr op_node = static_cast<const OpNodePtr>(node);
+    //     const OpNode * op_node = static_cast<const OpNode *>(node);
     //     const TensorNodePtr out_tensor = op_node->output();
     //     mlir::RankedTensorType out_tensor_type = get_tensor_type(out_tensor);
         
@@ -250,7 +309,7 @@ public:
     //                     auto zero = b.create<mlir::arith::ConstantOp>(l, b.getFloatAttr(args[0].getType(), 0.0));
     //                     auto max = b.create<mlir::arith::MaximumFOp>(l, args[0], zero);
     //                     b.create<mlir::linalg::YieldOp>(l, max);
-    //                 }).getResult(0);
+    //                 }).getResult()[0];
     //             break;
     //         }
 
@@ -275,7 +334,7 @@ public:
     //             mlir::Value in_A = value_map_.at(inputs[0]);
     //             mlir::Value in_B = value_map_.at(inputs[1]);
     //             result = builder_.create<mlir::linalg::MatmulOp>(loc, 
-    //                 mlir::ValueRange{in_A, in_B}, mlir::ValueRange{out_format}).getResult(0);
+    //                 mlir::ValueRange{in_A, in_B}, mlir::ValueRange{out_format}).getResult()[0];
     //             break;
     //         }
 
@@ -289,7 +348,7 @@ public:
 
     //             mlir::Value result = builder_.create<mlir::linalg::Conv2DNhwcFhwcOp>(
     //                 loc, mlir::ValueRange{X, W}, mlir::ValueRange{out_format}, strides, dilations
-    //             ).getResult(0);
+    //             ).getResult()[0];
 
     //             if (inputs.size() > 2 && inputs[2]) {
     //                 mlir::Value bias = value_map_.at(inputs[2]);

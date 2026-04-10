@@ -4,18 +4,18 @@
 #include <string>
 #include <vector>
 
-#include "node.hpp"
-#include "tensor_node.hpp"
+#include "nodes/node.hpp"
+#include "nodes/tensor_node.hpp"
 #include <graphviz/cgraph.h>
 #include <graphviz/gvc.h>
 
 namespace tensor_compiler {
 
-template <typename TensorNodePtr = TensorNode<Node *, Tensor *> *> class OpNode : public Node {
+class OpNode : public Node {
 
 protected:
     Shape out_shape_{};
-    TensorNodePtr out_Y{};
+    TensorNode *out_Y{};
 
     virtual Shape calc_out_shape() const = 0;
 
@@ -29,7 +29,7 @@ public:
         return out_shape_;
     }
 
-    void set_out_tensor(TensorNodePtr out_tensor) {
+    void set_out_tensor(TensorNode *out_tensor) {
         if (out_Y)
             throw std::logic_error("Tensor is already tied");
         Shape out_shape = get_out_shape();
@@ -52,22 +52,22 @@ public:
         return node;
     }
 
-    virtual std::vector<const TensorNodePtr> inputs() const = 0;
-    const TensorNodePtr output() const {
+    virtual std::vector<TensorNode *> inputs() const = 0;
+    const TensorNode *output() const {
         return out_Y;
     }
 };
 
-template <typename TensorNodePtr = TensorNode<Node *, Tensor *> *> class ConvNode : public OpNode<TensorNodePtr> {
-    TensorNodePtr in_X;
-    TensorNodePtr in_W;
-    TensorNodePtr in_Bias; // can be nullptr
+class ConvNode : public OpNode {
+    TensorNode * in_X;
+    TensorNode * in_W;
+    TensorNode * in_Bias; // can be nullptr
 
     size_t dim_;
-    std::vector<uint64_t> kernel_shape_; // [x1_size, x2_size, ...]
-    std::vector<uint64_t> strides_;      // [x1_stride, x2_stride, ...]
-    std::vector<uint64_t> dilations_;    // [x1_dilation, x2_dilation, ...]
-    std::vector<uint64_t> pads_;         // [x1_begin, x2_begin, ..., x1_end, x2_end, ...]
+    std::vector<int64_t> kernel_shape_; // [x1_size, x2_size, ...]
+    std::vector<int64_t> strides_;       // [x1_stride, x2_stride, ...]
+    std::vector<int64_t> dilations_;     // [x1_dilation, x2_dilation, ...]
+    std::vector<int64_t> pads_;         // [x1_begin, x2_begin, ..., x1_end, x2_end, ...]
     uint64_t group_ = 1;
 
     void validate() {
@@ -124,22 +124,22 @@ template <typename TensorNodePtr = TensorNode<Node *, Tensor *> *> class ConvNod
         out_shape.push_back(w_shape[0]); // out_Channels
 
         for (size_t i = 0; i < dim_; ++i) {
-            uint64_t d_in = static_cast<uint64_t>(x_shape[i + 2]);
-            uint64_t k = static_cast<uint64_t>(w_shape[i + 2]);
-            uint64_t s = strides_[i];
-            uint64_t d = dilations_[i];
-            uint64_t pad_begin = pads_[i];
-            uint64_t pad_end = pads_[i + dim_];
+            int64_t d_in = static_cast<int64_t>(x_shape[i + 2]);
+            int64_t k = static_cast<int64_t>(w_shape[i + 2]);
+            int64_t s = strides_[i];
+            int64_t d = dilations_[i];
+            int64_t pad_begin = pads_[i];
+            int64_t pad_end = pads_[i + dim_];
 
             // kernel with delation
-            uint64_t del_k = d * (k - 1) + 1;
+            int64_t del_k = d * (k - 1) + 1;
 
             if (d_in + pad_begin + pad_end < del_k)
                 throw std::runtime_error("ConvNode: Input dimension with padding is too small for "
                                          "kernel with delations " +
                                          std::to_string(i));
 
-            uint64_t d_out = (d_in + pad_begin + pad_end - del_k) / s + 1;
+            int64_t d_out = (d_in + pad_begin + pad_end - del_k) / s + 1;
             dim_t shape_out = static_cast<dim_t>(d_out);
             out_shape.push_back(shape_out);
         }
@@ -148,11 +148,11 @@ template <typename TensorNodePtr = TensorNode<Node *, Tensor *> *> class ConvNod
     }
 
 public:
-    ConvNode(std::string name, std::vector<uint64_t> kernel_shape, TensorNodePtr X, TensorNodePtr W,
-             TensorNodePtr bias = {}, std::vector<uint64_t> strides = {},
-             std::vector<uint64_t> dilations = {}, std::vector<uint64_t> pads = {},
+    ConvNode(std::string name, std::vector<int64_t> kernel_shape, TensorNode * X, TensorNode * W,
+             TensorNode * bias = {}, std::vector<int64_t> strides = {},
+             std::vector<int64_t> dilations = {}, std::vector<int64_t> pads = {},
              uint64_t group = 1)
-        : OpNode<TensorNodePtr>(std::move(name), NodeType::CONV), in_X{X}, in_W{W}, in_Bias{bias},
+        : OpNode(std::move(name), NodeType::CONV), in_X{X}, in_W{W}, in_Bias{bias},
           dim_{kernel_shape.size()}, kernel_shape_(std::move(kernel_shape)), group_(group) {
         if (strides.empty())
             strides_.assign(dim_, 1);
@@ -172,20 +172,20 @@ public:
         validate();
     }
 
-    virtual std::vector<const TensorNodePtr> inputs() const override {
+    virtual std::vector<TensorNode *> inputs() const override {
         return {in_X, in_W, in_Bias};
     }
 
-     const std::vector<uint64_t>& getStrides() const { return strides_; }
-    const std::vector<uint64_t>& getDilations() const { return dilations_; }
-    const std::vector<uint64_t>& getPads() const { return pads_; }
+    const std::vector<int64_t>& getStrides() const { return strides_; }
+    const std::vector<int64_t>& getDilations() const { return dilations_; }
+    const std::vector<int64_t>& getPads() const { return pads_; }
 };
 
 // Gemm: Y = alpha*A*B + beta*C)
-template <typename TensorNodePtr = TensorNode<Node *, Tensor *> *> class GemmNode : public OpNode<TensorNodePtr> {
-    TensorNodePtr in_A;
-    TensorNodePtr in_B;
-    TensorNodePtr in_C; // can be nullptr
+class GemmNode : public OpNode {
+    TensorNode * in_A;
+    TensorNode * in_B;
+    TensorNode * in_C; // can be nullptr
 
     double alpha_;
     double beta_;
@@ -244,15 +244,15 @@ template <typename TensorNodePtr = TensorNode<Node *, Tensor *> *> class GemmNod
     }
 
 public:
-    GemmNode(std::string name, TensorNodePtr A, TensorNodePtr B, TensorNodePtr C = {},
+    GemmNode(std::string name, TensorNode * A, TensorNode * B, TensorNode * C = {},
              double alpha = 1.0, double beta = 1.0, bool transpose_A = false,
              bool transpose_B = false)
-        : OpNode<TensorNodePtr>(std::move(name), NodeType::GEMM), in_A{A}, in_B{B}, in_C{C}, alpha_{alpha},
+        : OpNode(std::move(name), NodeType::GEMM), in_A{A}, in_B{B}, in_C{C}, alpha_{alpha},
           beta_{beta}, trA_{transpose_A}, trB_{transpose_B} {
         validate();
     }
 
-    virtual std::vector<const TensorNodePtr> inputs() const override {
+    virtual std::vector<TensorNode *> inputs() const override {
         return {in_A, in_B, in_C};
     }
 
@@ -270,9 +270,9 @@ public:
     // }
 };
 
-template <typename TensorNodePtr = TensorNode<Node *, Tensor *> *> class MatMulNode : public OpNode<TensorNodePtr> {
-    TensorNodePtr in_A;
-    TensorNodePtr in_B;
+class MatMulNode : public OpNode {
+    TensorNode * in_A;
+    TensorNode * in_B;
 
     void validate() {
         if (!in_A || !in_B)
@@ -336,19 +336,19 @@ template <typename TensorNodePtr = TensorNode<Node *, Tensor *> *> class MatMulN
     }
 
 public:
-    MatMulNode(std::string name, TensorNodePtr A, TensorNodePtr B)
-        : OpNode<TensorNodePtr>(std::move(name), NodeType::MATMUL), in_A{A}, in_B{B} {
+    MatMulNode(std::string name, TensorNode * A, TensorNode * B)
+        : OpNode(std::move(name), NodeType::MATMUL), in_A{A}, in_B{B} {
         validate();
     }
 
-    virtual std::vector<const TensorNodePtr> inputs() const override {
+    virtual std::vector<TensorNode *> inputs() const override {
         return {in_A, in_B};
     }
 };
 
-template <typename TensorNodePtr = TensorNode<Node *, Tensor *> *> class AddNode : public OpNode<TensorNodePtr> {
-    TensorNodePtr in_A;
-    TensorNodePtr in_B;
+class AddNode : public OpNode {
+    TensorNode * in_A;
+    TensorNode * in_B;
 
     void validate() {
         if (!in_A || !in_B)
@@ -395,19 +395,19 @@ template <typename TensorNodePtr = TensorNode<Node *, Tensor *> *> class AddNode
     }
 
 public:
-    AddNode(std::string name, TensorNodePtr A, TensorNodePtr B)
-        : OpNode<TensorNodePtr>(std::move(name), NodeType::ADD), in_A{A}, in_B{B} {
+    AddNode(std::string name, TensorNode * A, TensorNode * B)
+        : OpNode(std::move(name), NodeType::ADD), in_A{A}, in_B{B} {
         validate();
     }
 
-    virtual std::vector<const TensorNodePtr> inputs() const override {
+    virtual std::vector<TensorNode *> inputs() const override {
         return {in_A, in_B};
     }
 };
 
-template <typename TensorNodePtr = TensorNode<Node *, Tensor *> *> class MulNode : public OpNode<TensorNodePtr> {
-    TensorNodePtr in_A;
-    TensorNodePtr in_B;
+class MulNode : public OpNode {
+    TensorNode * in_A;
+    TensorNode * in_B;
 
     void validate() {
         if (!in_A || !in_B)
@@ -454,18 +454,18 @@ template <typename TensorNodePtr = TensorNode<Node *, Tensor *> *> class MulNode
     }
 
 public:
-    MulNode(const std::string &name, TensorNodePtr A, TensorNodePtr B)
-        : OpNode<TensorNodePtr>(name, NodeType::MUL), in_A{A}, in_B{B} {
+    MulNode(const std::string &name, TensorNode * A, TensorNode * B)
+        : OpNode(name, NodeType::MUL), in_A{A}, in_B{B} {
         validate();
     }
 
-    virtual std::vector<const TensorNodePtr> inputs() const override {
+    virtual std::vector<TensorNode *> inputs() const override {
         return {in_A, in_B};
     }
 };
 
-template <typename TensorNodePtr = TensorNode<Node *, Tensor *> *> class ReluNode : public OpNode<TensorNodePtr> {
-    TensorNodePtr in_A;
+class ReluNode : public OpNode {
+    TensorNode * in_A;
 
     void validate() {
         if (!in_A)
@@ -478,11 +478,11 @@ template <typename TensorNodePtr = TensorNode<Node *, Tensor *> *> class ReluNod
 
 
 public:
-    ReluNode(const std::string &name, TensorNodePtr A) : OpNode<TensorNodePtr>(name, NodeType::RELU), in_A{A} {
+    ReluNode(const std::string &name, TensorNode * A) : OpNode(name, NodeType::RELU), in_A{A} {
         validate();
     }
 
-    virtual std::vector<const TensorNodePtr> inputs() const override {
+    virtual std::vector<TensorNode *> inputs() const override {
         return {in_A};
     }
 };

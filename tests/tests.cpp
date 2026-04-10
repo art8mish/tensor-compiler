@@ -2,6 +2,7 @@
 #include <vector>
 #include <memory>
 #include <string>
+#include "cli.hpp"
 #include "factory.hpp"
 #include "tensor/tensor.hpp"
 #include "cgraph.hpp"
@@ -13,9 +14,6 @@ using namespace tensor_compiler;
 
 class TestTensorCompiler : public ::testing::Test {
 protected:
-    using TNode = TensorNode<Node *, Tensor *>;
-    using TNodePtr = TNode *;
-    
     ComputeGraph graph;
 };
 
@@ -60,15 +58,15 @@ TEST_F(TestTensorCompiler, TensorTypeMismatch) {
 TEST_F(TestTensorCompiler, GraphConnectivity) {
     Shape in_shape {1, 2};
     Tensor* in_t = graph.add_tensor(in_shape, DataType::FLOAT32);
-    TNodePtr in_node = graph.add_node<TNode>("input_node", in_t);
+    TensorNode * in_node = graph.add_node<TensorNode>("input_node", in_t);
     
-    auto* relu = graph.add_node<ReluNode<TNodePtr>>("relu_op", in_node);
+    auto relu = graph.add_node<ReluNode>("relu_op", in_node);
     
     in_node->add_output(relu);
     
     Shape out_shape {1, 2};
     Tensor* out_t = graph.add_tensor(out_shape, DataType::FLOAT32);
-    TNodePtr out_node = graph.add_node<TNode>("output_node", out_t);
+    TensorNode * out_node = graph.add_node<TensorNode>("output_node", out_t);
     
     relu->set_out_tensor(out_node);
     out_node->set_input(relu);
@@ -82,4 +80,60 @@ TEST_F(TestTensorCompiler, GraphConnectivity) {
 TEST_F(TestTensorCompiler, FactoryOnnxLoadingFailure) {
     ComputeGraphFactory factory;
     EXPECT_THROW(factory.from_onnx("non_existent_model.onnx"), std::runtime_error);
+}
+
+namespace {
+
+std::vector<char *> argv_from(std::vector<std::string> &storage) {
+    std::vector<char *> v;
+    for (auto &s : storage)
+        v.push_back(s.data());
+    return v;
+}
+
+} // namespace
+
+TEST(CliParse, Help) {
+    std::vector<std::string> s = {"tensor-compiler", "--help"};
+    auto av = argv_from(s);
+    tensor_compiler::ParsedCli p;
+    ASSERT_TRUE(tensor_compiler::parse_cli(static_cast<int>(av.size()), av.data(), p));
+    EXPECT_TRUE(p.help);
+}
+
+TEST(CliParse, PositionalObjectAndFlags) {
+    std::vector<std::string> s = {"tensor-compiler", "-S", "-G", "m.onnx", "out.o"};
+    auto av = argv_from(s);
+    tensor_compiler::ParsedCli p;
+    ASSERT_TRUE(tensor_compiler::parse_cli(static_cast<int>(av.size()), av.data(), p));
+    EXPECT_EQ(p.input_onnx, "m.onnx");
+    EXPECT_EQ(p.output_path, "out.o");
+    EXPECT_TRUE(p.emit_assembly_extra);
+    ASSERT_TRUE(p.graph_output.has_value());
+    EXPECT_EQ(*p.graph_output, "results/graph.png");
+}
+
+TEST(CliUtil, DeriveAssemblyPath) {
+    EXPECT_EQ(tensor_compiler::derive_assembly_path("dir/foo.o"), "dir/foo.s");
+    EXPECT_EQ(tensor_compiler::infer_output_format("x.o", nullptr), tensor_compiler::OutputFormat::Object);
+    EXPECT_EQ(tensor_compiler::infer_output_format("x.s", nullptr), tensor_compiler::OutputFormat::Assembly);
+}
+
+TEST_F(TestTensorCompiler, AddGraphStructure) {
+    Shape sh{2, 2};
+    Tensor *ta = graph.add_tensor(sh, DataType::FLOAT32);
+    Tensor *tb = graph.add_tensor(sh, DataType::FLOAT32);
+    auto *a = graph.add_node<TensorNode>("a", ta);
+    auto *b = graph.add_node<TensorNode>("b", tb);
+    Tensor *out = graph.add_tensor(sh, DataType::FLOAT32);
+    auto *out_n = graph.add_node<TensorNode>("out", out);
+    auto *add = graph.add_node<AddNode>("add", a, b);
+    a->add_output(add);
+    b->add_output(add);
+    add->set_out_tensor(out_n);
+    out_n->set_input(add);
+
+    EXPECT_EQ(graph.nodes().size(), 5u);
+    EXPECT_EQ(add->inputs().size(), 2u);
+    EXPECT_EQ(add->output(), out_n);
 }

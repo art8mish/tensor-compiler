@@ -4,3 +4,4 @@ results/
 third_party
 .venv/
 results/
+compile_commands.json

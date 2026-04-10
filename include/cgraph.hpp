@@ -1,6 +1,8 @@
 #pragma once
 
 #include "nodes/node.hpp"
+#include "nodes/tensor_node.hpp"
+#include "nodes/operations.hpp"
 #include "tensor/tensor.hpp"
 #include <list>
 #include <memory>
@@ -8,10 +10,6 @@
 #include <ranges>
 
 namespace tensor_compiler {
-
-using TNode = TensorNode<Node *, Tensor *>;
-using TNodePtr = TNode *;
-using OpNodePtr = OpNode<TNodePtr> *;
 
 class ComputeGraph {
     std::vector<std::unique_ptr<Node>> nodes_;

@@ -4,7 +4,11 @@ from onnx import TensorProto
 import numpy as np
 from pathlib import Path
 
-def create_test_onnx(file_name="test_model.onnx"):
+PROJECT_PATH = Path(__file__).parent.parent
+ONNX_MODELS_PATH = PROJECT_PATH / "models"
+ONNX_MODEL_PATH = ONNX_MODELS_PATH / "model.onnx"
+
+def create_test_onnx(file_name):
     # shape for Conv: [Batch, Channels, Height, Width] -> [1, 1, 5, 5]
     X = helper.make_tensor_value_info('X', TensorProto.FLOAT, [1, 1, 5, 5])
     
@@ -40,9 +44,9 @@ def create_test_onnx(file_name="test_model.onnx"):
         name='test_relu'
     )
     
-    # Add (const)
-    bias_data = np.array([1.0], dtype=np.float32)
-    bias_tensor = helper.make_tensor('add_bias', TensorProto.FLOAT, [1], bias_data)
+    # Add
+    bias_data = np.full((1, 1, 3, 3), 1.0, dtype=np.float32)
+    bias_tensor = helper.make_tensor('add_bias', TensorProto.FLOAT, [1, 1, 3, 3], bias_data.flatten())
     
     node_add = helper.make_node(
         'Add',
@@ -51,7 +55,6 @@ def create_test_onnx(file_name="test_model.onnx"):
         name='test_add'
     )
 
-    # graph
     graph_def = helper.make_graph(
         [node_conv, node_relu, node_add],
         'TestGraph',
@@ -68,6 +71,6 @@ def create_test_onnx(file_name="test_model.onnx"):
     print(f"Model is save: {file_name}")
 
 if __name__ == "__main__":
-    test_model_path = Path(__file__).parent / "models" / "test_model.onnx"
+    test_model_path = ONNX_MODEL_PATH
     test_model_path.parent.mkdir(parents=True, exist_ok=True)
     create_test_onnx(test_model_path)

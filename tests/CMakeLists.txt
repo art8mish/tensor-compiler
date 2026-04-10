@@ -13,20 +13,17 @@ function(add_proj_test target)
         ${MLIR_INCLUDE_DIRS}
     )
     target_compile_features(${target} PRIVATE cxx_std_20)
-    target_compile_definitions(${target} PRIVATE ONNX_ML)
     target_link_libraries(${target} PRIVATE 
         GTest::gtest_main 
         ${GRAPHVIZ_LIBRARIES} 
         ${ONNX_LIBRARY} 
         ${ONNX_PROTO_LIBRARY} 
         ${Protobuf_LIBRARIES}
-        MLIRIR
-        MLIRLinalgDialect
-        MLIRArithDialect
-        MLIRTensorDialect
-        MLIRTargetLLVMIRExport
+        ${MLIR_LIBS}
         ${llvm_libs}
     )
+    target_compile_definitions(${target} PRIVATE ONNX_ML)
+    target_compile_definitions(${target} PRIVATE ${LLVM_DEFINITIONS})
     gtest_discover_tests(${target})
 endfunction()
 

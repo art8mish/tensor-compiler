@@ -11,11 +11,11 @@
 
 namespace tensor_compiler {
 
-template <typename NodePtr = Node *, typename TensorPtr = Tensor *> class TensorNode : public Node {
-    TensorPtr tensor_{};
+class TensorNode : public Node {
+    Tensor *tensor_{};
 
-    NodePtr input_{};
-    std::unordered_set<NodePtr> output_{};
+    Node *input_{};
+    std::unordered_set<Node *> output_{};
 
     void check_tensor() const {
         if (!tensor_)
@@ -24,8 +24,8 @@ template <typename NodePtr = Node *, typename TensorPtr = Tensor *> class Tensor
 
 
 public:
-    TensorNode(std::string name, TensorPtr tensor = {}, NodePtr input = {},
-               std::unordered_set<NodePtr> output = {})
+    TensorNode(std::string name, Tensor *tensor = {}, Node * input = {},
+               std::unordered_set<Node *> output = {})
         : Node(name, NodeType::TENSOR), tensor_(tensor), input_(input),
           output_(std::move(output)) {}
 
@@ -39,31 +39,31 @@ public:
         return tensor_->dtype();
     }
 
-    const TensorPtr &tensor() const {
+    const Tensor *tensor() const {
         return tensor_;
     }
 
-    const NodePtr &input() const {
+    const Node *input() const {
         return input_;
     }
 
-    const std::unordered_set<NodePtr> &output() const {
+    const std::unordered_set<Node *> &output() const {
         return output_;
     }
 
-    void set_tensor(TensorPtr tensor) {
+    void set_tensor(Tensor *tensor) {
         if (tensor_)
             throw std::logic_error("Tensor is already tied");
         tensor_ = tensor;
     }
 
-    void set_input(NodePtr node) {
+    void set_input(Node *node) {
         if (input_)
             throw std::logic_error("Input node is already tied");
         input_ = node;
     }
 
-    void add_output(NodePtr output) {
+    void add_output(Node *output) {
         output_.insert(output);
     }
 
@@ -71,11 +71,8 @@ public:
         Agnode_t *node = (tensor_) ? tensor_->get_node(g) : get_node(g);
         if (node != nullptr)
             return node;
-
-        std::cout << "Drawing " << name() <<  "\n";
         node = (tensor_) ? tensor_->draw(g, name_) : Node::draw(g);
         for (const auto &out : output_) {
-            std::cout << "Out " << out->name() << " " << out <<  "\n";
             Agnode_t *out_node = out->draw(g);
             agedge(g, node, out_node, nullptr, 1);
         }

@@ -1,129 +1,121 @@
-
 # Tensor Compiler
 
-## Build
+Проект компилирует **ONNX**-модель в вычислительный граф (`ComputeGraph`), строит представление в **MLIR** (Linalg/arith/tensor), затем понижает его до **LLVM IR** и генерирует **объектный файл (`.o`)** или **ассемблер (`.s`)** для нативной цели. Отдельно собирается **`kernel_driver`** — минимальный запуск скомпилированного ядра и сравнение с эталоном из Python/PyTorch.
+
+## Поток данных
+
+```text
+ONNX → ComputeGraph → MLIR (bufferize → loops → LLVM dialect) → LLVM IR → asm/obj
+```
+
+Генерация тестовой модели: вручную `python3 end2end/gen.py` (не через CMake). Эталонные выходы для сравнения: `python3 end2end/pytorch_reference.py` (PyTorch) → `golden.bin`.
+
+## Зависимости
+
+- **CMake** ≥ 3.16, **C++20**
+- **pkg-config**, **Graphviz** (`libgvc`, `libcgraph`)
+- **Protobuf**, библиотеки **ONNX** (`onnx`, `onnx_proto`) и заголовки `onnx/onnx_pb.h`
+- **LLVM/MLIR** с установленным `MLIRConfig.cmake` (типичная сборка `llvm-project` с `LLVM_ENABLE_PROJECTS=mlir`; см. ниже)
+- Для **юнит-тестов**: GoogleTest
+- Для **end2end** (опционально): см. [`end2end/requirements-extra.txt`](end2end/requirements-extra.txt) (`torch`, `onnx`, `numpy`)
+
+### Сборка LLVM + MLIR (кратко)
 
 ```shell
-mkdir third_party && cd third_party
-wget https://github.com/microsoft/onnxruntime/releases/download/<version>/onnxruntime-linux-x64-<version>.tgz
-tar -zxvf onnxruntime-linux-x64-<version>.tgz
-cd ../
-
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build
+git clone https://github.com/llvm/llvm-project.git
+cd llvm-project && mkdir build && cd build
+cmake -G Ninja ../llvm \
+  -DLLVM_ENABLE_PROJECTS="mlir" \
+  -DLLVM_TARGETS_TO_BUILD="Native" \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DLLVM_ENABLE_ASSERTIONS=ON \
+  -DLLVM_ENABLE_RTTI=ON \
+  -DLLVM_INCLUDE_TESTS=OFF
+ninja
+sudo cmake --install .
 ```
 
-Dependences:
+Для `compile_commands.json` в проекте уже включено `CMAKE_EXPORT_COMPILE_COMMANDS`.
+
+### Системные пакеты (пример Debian/Ubuntu)
+
 ```shell
-sudo apt update
-sudo apt install build-essential cmake pkg-config
+sudo apt install build-essential cmake pkg-config \
+  protobuf-compiler libprotobuf-dev libonnx-dev \
+  libgraphviz-dev libgtest-dev
 ```
 
-- ONNX
+## Сборка проекта
+
 ```shell
-sudo apt install protobuf-compiler libprotobuf-dev libonnx-dev
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_PREFIX_PATH="/path/to/llvm-install"
+cmake --build build -j$(nproc)
 ```
 
-- Graphviz:
+Артефакты:
+
+- `build/tensor-compiler` — основной компилятор
+- `build/kernel_driver` — если `BUILD_KERNEL_DRIVER=ON` (по умолчанию): нужен уже существующий `end2end/models/test_model.onnx` (сгенерируйте через `gen.py` до сборки шага `kernel.o`)
+- `build/tests` — юнит-тесты
+
+Отключить драйвер ядра: `-DBUILD_KERNEL_DRIVER=OFF`.  
+Отключить тесты: `-DBUILD_TESTS=OFF`.
+
 ```shell
-sudo apt install graphviz libgraphviz-dev
+ctest --test-dir build
 ```
 
-- GoggleTest:
+## CLI: `tensor-compiler`
+
+Обязательные позиционные аргументы: `<model.onnx> <выход.(s|o)>`.
+
+| Опция | Описание |
+|--------|----------|
+| `-h`, `--help` | Справка |
+| `-S [path]` | Дополнительно сгенерировать ассемблер. Для выхода `*.o` без пути: пишется `<stem>.s` рядом с объектником |
+| `-G [path]` | PNG графа `ComputeGraph` (Graphviz). Без пути: `results/graph.png`. Если следующий аргумент — `*.onnx`, граф по умолчанию (чтобы не перепутать с именем файла) |
+| `--graph=path` | Явный путь к PNG |
+| `--llvm-triple=…` | Triple для LLVM `TargetMachine` |
+| `--llvm-cpu=…` | CPU |
+| `--llvm-features=…` | Строка subtarget features |
+| `--reloc=pic\|static\|default` | Модель релокации |
+
+Устаревший третий позиционный аргумент `object` / `assembly` всё ещё принимается; предпочтительно задавать формат по расширению (`.o` / `.s`).
+
+Примеры:
+
 ```shell
-sudo apt install libgtest-dev
+./build/tensor-compiler model.onnx out.s
+./build/tensor-compiler -S model.onnx out.o
+./build/tensor-compiler -G --graph=doc/graph.png model.onnx out.o
+./build/tensor-compiler --llvm-cpu=generic -S model.onnx out.o
 ```
 
-- LLVM:
+## Эталон и `kernel_driver`
+
+1. Сгенерируйте ONNX: `python3 end2end/gen.py`
+2. Эталон PyTorch (те же веса, что в ONNX):  
+   `python3 end2end/pytorch_reference.py --onnx end2end/models/test_model.onnx --out end2end/golden.bin`
+3. Соберите объектник:  
+   `./build/tensor-compiler end2end/models/test_model.onnx build/kernel.o`
+4. Пересоберите `kernel_driver` (или используйте уже собранный `kernel.o` из `build/`)
+5. Запуск и сравнение:
+
 ```shell
-sudo apt-get install -y cmake ninja-build clang lld
+./build/kernel_driver --compare end2end/golden.bin -v
 ```
 
-## ONNX Format
+Формат `golden.bin`: 9 значений `float32` (выход `1×1×3×3`), порядок как у линейного массива в памяти C.
 
-```
-onnx::ModelProto                    ← Корневой объект
-├─ ir_version: int64
-├─ producer_name/version: string
-├─ opset_import[]: OperatorSetIdProto
-│  ├─ domain: string ("", "ai.onnx.ml")
-│  └─ version: int64
-├─ graph: GraphProto                ← Вычислительный граф
-│  ├─ name: string
-│  ├─ input[]: ValueInfoProto       ← Внешние входы модели
-│  ├─ output[]: ValueInfoProto      ← Внешние выходы модели
-│  ├─ value_info[]: ValueInfoProto  ← Промежуточные тензоры (опционально)
-│  ├─ node[]: NodeProto             ← Операции (операторы)
-│  │  ├─ name: string
-│  │  ├─ op_type: string ("Conv", "Relu"...)
-│  │  ├─ input[]: string           ← Имена входных тензоров
-│  │  ├─ output[]: string          ← Имена выходных тензоров
-│  │  ├─ attribute[]: AttributeProto ← Параметры операции
-│  │  │  ├─ name: string
-│  │  │  ├─ type: int (AttributeType enum)
-│  │  │  ├─ f: float, i: int64, s: string, t: TensorProto, floats[], ints[]...
-│  │  └─ domain: string
-│  └─ initializer[]: TensorProto    ← Веса (константы)
-│     ├─ name: string
-│     ├─ data_type: int32 (TensorProto.DataType)
-│     ├─ dims[]: int64
-│     ├─ float_data[], int32_data[], raw_data: bytes...
-└─ metadata_props[]: StringStringEntryProto
+## Каталог `end2end`
 
-message ValueInfoProto {
-  string name = 1;
-  TypeProto type = 2;  // ← ключевое поле
-}
+| Файл | Назначение |
+|------|------------|
+| [`gen.py`](end2end/gen.py) | Создаёт тестовый `models/test_model.onnx` |
+| [`pytorch_reference.py`](end2end/pytorch_reference.py) | Эталон через PyTorch, запись `golden.bin` |
+| [`requirements-extra.txt`](end2end/requirements-extra.txt) | pip-зависимости для скриптов |
 
-message TypeProto {
-  message Tensor {
-    int32 elem_type = 1;  // TensorProto.DataType
-    ShapeProto shape = 2;
-  }
-  Tensor tensor_type = 1;
-  // ... другие типы (Sequence, Map, Optional)
-}
+## ONNX Runtime (сторонняя ссылка)
 
-message ShapeProto {
-  repeated Dimension dim = 1;
-}
-
-message Dimension {
-  oneof value {
-    int64 dim_value = 1;  // конкретное значение
-    string dim_param = 2; // символ ("N", "batch") для динамических размеров
-  }
-}
-
-
-message NodeProto {
-  string name = 1;
-  string op_type = 2;           // "Conv", "MatMul", "Relu"...
-  repeated string input = 3;    // имена входных тензоров
-  repeated string output = 4;   // имена выходных тензоров (обычно 1)
-  repeated AttributeProto attribute = 5;
-  string domain = 6;            // "" для ai.onnx, "ai.onnx.ml" для ML-операций
-}
-
-// Соответствие атрибутам ONNX Conv
-attribute {
-  name: "kernel_shape"  // ints: [3, 3]
-  type: INTS            // enum AttributeType
-  ints: 3
-  ints: 3
-}
-attribute {
-  name: "strides"       // ints: [2, 2]
-  type: INTS
-  ints: 2
-  ints: 2
-}
-attribute {
-  name: "pads"          // ints: [1, 1, 1, 1] (top, left, bottom, right)
-  type: INTS
-}
-attribute {
-  name: "group"         // i: 1 (int64)
-  type: INT
-}
-```
+В readme ранее упоминался архив **onnxruntime** — он не обязателен для сборки C++-части; эталон реализован через PyTorch в `pytorch_reference.py`.
