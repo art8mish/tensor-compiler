@@ -1,13 +1,3 @@
-#!/usr/bin/env python3
-"""
-Reference inference for models produced by gen.py (Conv -> Relu -> Add with broadcast bias).
-Uses PyTorch to mirror the ONNX graph; writes float32 little-endian golden.bin for kernel_driver --compare.
-
-Usage:
-  python3 pytorch_reference.py [--onnx path] [--out golden.bin] [--sum-only]
-"""
-from __future__ import annotations
-
 import argparse
 from pathlib import Path
 
@@ -16,6 +6,8 @@ import onnx
 import torch
 import torch.nn as nn
 from onnx import numpy_helper
+
+from gen import ONNX_MODEL_PATH
 
 
 def load_conv_and_bias(onnx_path: Path) -> tuple[np.ndarray, np.ndarray]:
@@ -32,7 +24,6 @@ def load_conv_and_bias(onnx_path: Path) -> tuple[np.ndarray, np.ndarray]:
 
 
 class RefNet(nn.Module):
-    """Matches end2end/gen.py: Conv 3x3, stride 1, pad 0; ReLU; Add bias [1,1,3,3]."""
 
     def __init__(self, w: np.ndarray, bias: np.ndarray) -> None:
         super().__init__()
@@ -52,14 +43,8 @@ def main() -> None:
     ap.add_argument(
         "--onnx",
         type=Path,
-        default=Path(__file__).parent / "models" / "test_model.onnx",
+        default=ONNX_MODEL_PATH,
         help="Path to ONNX model",
-    )
-    ap.add_argument(
-        "--out",
-        type=Path,
-        default=Path(__file__).parent / "golden.bin",
-        help="Output float32 binary (9 elements for 1x1x3x3)",
     )
     ap.add_argument("--sum-only", action="store_true", help="Print sum only, do not write file")
     args = ap.parse_args()
@@ -72,16 +57,11 @@ def main() -> None:
     x[0, 0, 0, 0] = 1.0
 
     with torch.no_grad():
-        y = net(x).numpy().astype(np.float32).ravel()
-
-    s = float(y.sum())
-    print(f"pytorch_reference: output sum = {s:g}")
+        y = net(x).numpy()
+        
+    print(f"Pytorch output:\n{y}")
     if args.sum_only:
         return
-
-    args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_bytes(y.tobytes())
-    print(f"Wrote {len(y)} floats to {args.out}")
 
 
 if __name__ == "__main__":

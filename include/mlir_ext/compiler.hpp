@@ -1,8 +1,9 @@
 #pragma once
 
 #include <memory>
-#include <optional>
 #include <mlir/Dialect/Math/IR/Math.h>
+#include <optional>
+#include <stdexcept>
 #include <string>
 #include <system_error>
 
@@ -11,14 +12,14 @@
 #include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
 #include "mlir/Conversion/ArithToLLVM/ArithToLLVM.h"
 #include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"
+#include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVMPass.h"
 #include "mlir/Conversion/IndexToLLVM/IndexToLLVM.h"
 #include "mlir/Conversion/MathToLLVM/MathToLLVM.h"
+#include "mlir/Conversion/MemRefToLLVM/MemRefToLLVM.h"
 #include "mlir/Conversion/ReconcileUnrealizedCasts/ReconcileUnrealizedCasts.h"
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
-#include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVMPass.h"
-#include "mlir/Conversion/MemRefToLLVM/MemRefToLLVM.h"
-#include "mlir/Conversion/VectorToLLVM/ConvertVectorToLLVMPass.h"
 #include "mlir/Conversion/VectorToLLVM/ConvertVectorToLLVM.h"
+#include "mlir/Conversion/VectorToLLVM/ConvertVectorToLLVMPass.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
 #include "mlir/Dialect/Bufferization/Transforms/FuncBufferizableOpInterfaceImpl.h"
@@ -26,8 +27,8 @@
 #include "mlir/Dialect/Bufferization/Transforms/Passes.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
-#include "mlir/Dialect/Linalg/Passes.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/Linalg/Passes.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/MemRef/Transforms/Passes.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -38,13 +39,13 @@
 #include "mlir/Target/LLVMIR/Export.h"
 #include "mlir/Transforms/Passes.h"
 
-#include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Verifier.h"
 #include "llvm/MC/TargetRegistry.h"
-#include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/TargetSelect.h"
+#include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/TargetParser/Host.h"
 
@@ -74,15 +75,14 @@ public:
         llvm::InitializeNativeTargetAsmParser();
     }
 
-    auto compile(MLIRComputeGraph &graph, const std::string &out_path, OutputFormat format,
-                   const LLVMOptions &llvm_opts = {},
-                   const std::optional<std::string> &assembly_path = std::nullopt, const std::optional<std::string> &ll_path = std::nullopt) {
+    std::unique_ptr<llvm::Module> build_llvm(MLIRComputeGraph &graph, llvm::LLVMContext &llvm_ctx) {
         mlir::DialectRegistry registry;
-        registry.insert<mlir::affine::AffineDialect, mlir::arith::ArithDialect,
-                        mlir::bufferization::BufferizationDialect, mlir::cf::ControlFlowDialect,
-                        mlir::func::FuncDialect, mlir::linalg::LinalgDialect, mlir::LLVM::LLVMDialect,
-                        mlir::math::MathDialect, mlir::memref::MemRefDialect, mlir::scf::SCFDialect,
-                        mlir::tensor::TensorDialect>();
+        registry
+            .insert<mlir::affine::AffineDialect, mlir::arith::ArithDialect,
+                    mlir::bufferization::BufferizationDialect, mlir::cf::ControlFlowDialect,
+                    mlir::func::FuncDialect, mlir::linalg::LinalgDialect, mlir::LLVM::LLVMDialect,
+                    mlir::math::MathDialect, mlir::memref::MemRefDialect, mlir::scf::SCFDialect,
+                    mlir::tensor::TensorDialect>();
 
         mlir::arith::registerBufferizableOpInterfaceExternalModels(registry);
         mlir::linalg::registerBufferizableOpInterfaceExternalModels(registry);
@@ -101,7 +101,9 @@ public:
 
         mlir::bufferization::OneShotBufferizePassOptions buf_opts;
         buf_opts.bufferizeFunctionBoundaries = true;
+        buf_opts.allowUnknownOps = true;
         pm.addPass(mlir::bufferization::createOneShotBufferizePass(buf_opts));
+        pm.addPass(mlir::bufferization::createBufferResultsToOutParamsPass());
 
         pm.addPass(mlir::createConvertLinalgToLoopsPass());
         pm.addPass(mlir::createLowerAffinePass());
@@ -119,18 +121,59 @@ public:
 
         pm.addPass(mlir::createReconcileUnrealizedCastsPass());
 
-        if (mlir::failed(pm.run(graph.module())))
-            return false;
-        if (mlir::failed(mlir::verify(graph.module())))
-            return false;
+        auto module = graph.module();
+        // module.dump();
+        if (mlir::failed(pm.run(module)) || mlir::failed(mlir::verify(module)))
+            throw std::runtime_error("Passing MLIR module to LLVM failed");
 
-        llvm::LLVMContext llvm_ctx;
-        auto llvm_mod = mlir::translateModuleToLLVMIR(graph.module(), llvm_ctx);
-        if (!llvm_mod)
-            return false;
+        auto llvm_mod = mlir::translateModuleToLLVMIR(module, llvm_ctx);
         if (llvm::verifyModule(*llvm_mod, &llvm::errs()))
-            return false;
-        return llvm_ctx
+            throw std::runtime_error("Translating MLIR module to LLVM IR failed");
+        // module.dump();
+        return llvm_mod;
+    }
+
+
+
+    static void compile(llvm::Module &mod, const std::string &path, OutputFormat format,
+                          const LLVMOptions &opts) {
+        std::string triple_str = opts.triple.value_or(llvm::sys::getDefaultTargetTriple());
+        llvm::Triple triple(triple_str);
+
+        std::string err;
+        const llvm::Target *target = llvm::TargetRegistry::lookupTarget(triple, err);
+        if (!target)
+            throw std::runtime_error("LLVM target is not found");
+
+        std::string cpu = opts.cpu.value_or(llvm::sys::getHostCPUName().str());
+        std::string feat = opts.features.value_or("");
+
+        llvm::TargetOptions opt;
+        auto reloc_model = to_llvm_reloc(opts.reloc);
+
+        std::unique_ptr<llvm::TargetMachine> tm(
+            target->createTargetMachine(triple, cpu, feat, opt, reloc_model));
+
+        if (!tm)
+            throw std::runtime_error("LLVM target machine creation is failed");
+
+        mod.setDataLayout(tm->createDataLayout());
+        mod.setTargetTriple(triple);
+
+        std::error_code ec;
+        llvm::raw_fd_ostream dest(path, ec);
+        if (ec)
+            throw std::runtime_error("File opening is failed: " + path);
+
+        llvm::legacy::PassManager cg_pm;
+        auto file_type = (format == OutputFormat::Assembly) ? llvm::CodeGenFileType::AssemblyFile
+                                                            : llvm::CodeGenFileType::ObjectFile;
+
+        if (tm->addPassesToEmitFile(cg_pm, dest, nullptr, file_type))
+            throw std::runtime_error("LLVM file emition is failed");
+
+        cg_pm.run(mod);
+        dest.flush();
     }
 
 private:
@@ -143,49 +186,6 @@ private:
         default:
             return llvm::Reloc::PIC_;
         }
-    }
-
-    static bool emit_file(llvm::Module &mod, const std::string &path, OutputFormat format,
-                   const LLVMOptions &opts) {
-        std::string triple_str =
-            opts.triple.value_or(llvm::sys::getDefaultTargetTriple());
-        llvm::Triple triple(triple_str);
-
-        std::string err;
-        const llvm::Target *target = llvm::TargetRegistry::lookupTarget(triple, err);
-        if (!target)
-            return false;
-
-        std::string cpu = opts.cpu.value_or(llvm::sys::getHostCPUName().str());
-        std::string feat = opts.features.value_or("");
-
-        llvm::TargetOptions opt;
-        auto reloc_model = to_llvm_reloc(opts.reloc);
-
-        std::unique_ptr<llvm::TargetMachine> tm(
-            target->createTargetMachine(triple, cpu, feat, opt, reloc_model));
-
-        if (!tm)
-            return false;
-
-        mod.setDataLayout(tm->createDataLayout());
-        mod.setTargetTriple(triple);
-
-        std::error_code ec;
-        llvm::raw_fd_ostream dest(path, ec);
-        if (ec)
-            return false;
-
-        llvm::legacy::PassManager cg_pm;
-        auto file_type = (format == OutputFormat::Assembly) ? llvm::CodeGenFileType::AssemblyFile
-                                                            : llvm::CodeGenFileType::ObjectFile;
-
-        if (tm->addPassesToEmitFile(cg_pm, dest, nullptr, file_type))
-            return false;
-
-        cg_pm.run(mod);
-        dest.flush();
-        return true;
     }
 };
 

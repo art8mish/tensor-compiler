@@ -23,7 +23,14 @@ struct Cli {
 
     LLVMOptions llvm_opts;
 
-    
+    static std::string process_arg_val(int argc, char **argv, int &i, std::string def) {
+        auto out = def;
+        if (i + 1 < argc && argv[i + 1][0] != '-') {
+            out = argv[i + 1];
+            ++i;
+        }
+        return out;
+    }
 
     Cli(int argc, char **argv) {
         for (int i = 1; i < argc; ++i) {
@@ -33,44 +40,19 @@ struct Cli {
                 return;
             }
             if (std::strcmp(arg, "-S") == 0) {
-                if (i + 1 < argc && argv[i + 1][0] != '-') {
-                    out_asm = argv[i + 1];
-                    ++i;
-                }
-                else
-                    out_asm = std::string("results/out.s");
+                out_asm = process_arg_val(argc, argv, i, "results/out.s");
                 continue;
             }
             if (std::strcmp(arg, "-G") == 0) {
-                if (i + 1 < argc && argv[i + 1][0] != '-') {
-                    out_graph = argv[i + 1];
-                    ++i;
-                } else
-                    out_graph = std::string("results/graph.png");
+                out_graph = process_arg_val(argc, argv, i,"results/graph.png");
                 continue;
             }
             if (std::strcmp(arg, "-l") == 0) {
-                if (i + 1 < argc && argv[i + 1][0] != '-') {
-                    out_ll = argv[i + 1];
-                    ++i;
-                }
-                else
-                    out_ll = std::string("results/out.ll");
+                out_ll = process_arg_val(argc, argv, i,"results/out.ll");
                 continue;
             }
             if (std::strcmp(arg, "-o") == 0) {
-                if (i + 1 < argc && argv[i + 1][0] != '-') {
-                    out_path = argv[i + 1];
-                    ++i;
-                }
-                else
-                    throw std::invalid_argument("Invalid -o value");
-                continue;
-            }
-
-
-            if (const char *v = eq_value(arg, "--graph")) {
-                out_graph = v;
+                out_path = process_arg_val(argc, argv, i,"results/out.o");
                 continue;
             }
             if (const char *v = eq_value(arg, "--llvm-triple")) {
@@ -103,8 +85,8 @@ struct Cli {
         if (!input_onnx)
             throw std::invalid_argument("Expected <model.onnx>");
 
-        if (!out_path)
-            throw std::invalid_argument("Expected -o <output.o>");
+        if (!out_graph && !out_path && !out_asm && !out_ll)
+            throw std::invalid_argument("Expected [-o <output.o>|-S <output.s>|-G");
     }
 
     const char *eq_value(const char *arg, const char *prefix) {
@@ -136,14 +118,14 @@ struct Cli {
 
     static void print_help(std::ostream &os, const char *argv0) {
         os << "Usage: " << argv0
-        << " [options] <model.onnx> -o <output.o>\n"
+        << " [options] <model.onnx> (-o [path.o] | -S [path.s] | -l [path.ll] | -G [path.png]) \n"
             "\n"
             "Options:\n"
             "  -h, --help              Show this help\n"
-            "  -S [path]               Create assembly file. Default: results/out.s\n"
-            "  -G [path]               Compute graph image (Graphviz PNG). Default: results/graph.png\n"
-            "  -l [path]               LLVM IR output (.ll). Default: results/out.ll\n"
-            "  --graph=path            Same as -G with explicit path\n"
+            "  -o [path.o]             Create object file. Default: results/out.o\n"
+            "  -S [path.s]             Create assembly file. Default: results/out.s\n"
+            "  -l [path.ll]            LLVM IR output. Default: results/out.ll\n"
+            "  -G [path.png]           Compute graph image (Graphviz PNG). Default: results/graph.png\n"
             "  --llvm-triple=TRIPLE    LLVM target triple\n"
             "  --llvm-cpu=CPU          LLVM target CPU\n"
             "  --llvm-features=STR     LLVM subtarget features string\n"
@@ -151,7 +133,7 @@ struct Cli {
             "\n"
             "Examples:\n"
             "  " << argv0 << " model.onnx -o out.o\n"
-            "  " << argv0 << " -S model.onnx -o out.o   # also writes results/out.s\n";
+            "  " << argv0 << " -S model.onnx -o out.o   # writes results/out.s\n";
     }
 };
 

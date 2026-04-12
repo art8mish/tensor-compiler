@@ -93,31 +93,6 @@ std::vector<char *> argv_from(std::vector<std::string> &storage) {
 
 } // namespace
 
-TEST(CliParse, Help) {
-    std::vector<std::string> s = {"tensor-compiler", "--help"};
-    auto av = argv_from(s);
-    tensor_compiler::ParsedCli p;
-    ASSERT_TRUE(tensor_compiler::parse_cli(static_cast<int>(av.size()), av.data(), p));
-    EXPECT_TRUE(p.help);
-}
-
-TEST(CliParse, PositionalObjectAndFlags) {
-    std::vector<std::string> s = {"tensor-compiler", "-S", "-G", "m.onnx", "out.o"};
-    auto av = argv_from(s);
-    tensor_compiler::ParsedCli p;
-    ASSERT_TRUE(tensor_compiler::parse_cli(static_cast<int>(av.size()), av.data(), p));
-    EXPECT_EQ(p.input_onnx, "m.onnx");
-    EXPECT_EQ(p.output_path, "out.o");
-    EXPECT_TRUE(p.emit_assembly_extra);
-    ASSERT_TRUE(p.graph_output.has_value());
-    EXPECT_EQ(*p.graph_output, "results/graph.png");
-}
-
-TEST(CliUtil, DeriveAssemblyPath) {
-    EXPECT_EQ(tensor_compiler::derive_assembly_path("dir/foo.o"), "dir/foo.s");
-    EXPECT_EQ(tensor_compiler::infer_output_format("x.o", nullptr), tensor_compiler::OutputFormat::Object);
-    EXPECT_EQ(tensor_compiler::infer_output_format("x.s", nullptr), tensor_compiler::OutputFormat::Assembly);
-}
 
 TEST_F(TestTensorCompiler, AddGraphStructure) {
     Shape sh{2, 2};

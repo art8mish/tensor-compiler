@@ -5,3 +5,8 @@ third_party
 .venv/
 results/
 compile_commands.json
+models/
+obj/
+model
+opt_model
+/**/__pycache__/

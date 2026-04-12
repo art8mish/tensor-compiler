@@ -12,8 +12,7 @@ def create_test_onnx(file_name):
     # shape for Conv: [Batch, Channels, Height, Width] -> [1, 1, 5, 5]
     X = helper.make_tensor_value_info('X', TensorProto.FLOAT, [1, 1, 5, 5])
     
-    # Initializers
-    # weights for Conv: [Out_Channels, In_Channels, kH, kW] -> [1, 1, 3, 3]
+    # Initializers for Conv: [Out_Channels, In_Channels, kH, kW] -> [1, 1, 3, 3]
     conv_w_data = np.random.randn(1, 1, 3, 3).astype(np.float32)
     conv_w = helper.make_tensor('W', TensorProto.FLOAT, [1, 1, 3, 3], conv_w_data.flatten())
     
