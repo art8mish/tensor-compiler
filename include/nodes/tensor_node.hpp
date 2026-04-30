@@ -22,12 +22,11 @@ class TensorNode : public Node {
             throw std::logic_error("Tensor is not initialized");
     }
 
-
 public:
-    TensorNode(std::string name, Tensor *tensor = {}, Node * input = {},
+    TensorNode(std::string name, Tensor *tensor = {}, Node *input = {},
                std::unordered_set<Node *> output = {})
-        : Node(name, NodeType::TENSOR), tensor_(tensor), input_(input),
-          output_(std::move(output)) {}
+        : Node(name, NodeType::TENSOR), tensor_(tensor), input_(input), output_(std::move(output)) {
+    }
 
     const Shape &shape() const {
         check_tensor();

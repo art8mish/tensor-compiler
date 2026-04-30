@@ -44,15 +44,15 @@ struct Cli {
                 continue;
             }
             if (std::strcmp(arg, "-G") == 0) {
-                out_graph = process_arg_val(argc, argv, i,"results/graph.png");
+                out_graph = process_arg_val(argc, argv, i, "results/graph.png");
                 continue;
             }
             if (std::strcmp(arg, "-l") == 0) {
-                out_ll = process_arg_val(argc, argv, i,"results/out.ll");
+                out_ll = process_arg_val(argc, argv, i, "results/out.ll");
                 continue;
             }
             if (std::strcmp(arg, "-o") == 0) {
-                out_path = process_arg_val(argc, argv, i,"results/out.o");
+                out_path = process_arg_val(argc, argv, i, "results/out.o");
                 continue;
             }
             if (const char *v = eq_value(arg, "--llvm-triple")) {
@@ -105,35 +105,47 @@ struct Cli {
     //     return output_path.substr(0, pos) + ".s";
     // }
 
-    // static OutputFormat infer_output_format(const std::string &output_path, const char *legacy_fmt_opt) {
+    // static OutputFormat infer_output_format(const std::string &output_path,
+    // const char *legacy_fmt_opt) {
     //     if (legacy_fmt_opt) {
     //         if (std::strcmp(legacy_fmt_opt, "object") == 0)
     //             return OutputFormat::Object;
     //         return OutputFormat::Assembly;
     //     }
-    //     if (output_path.size() >= 2 && output_path.compare(output_path.size() - 2, 2, ".o") == 0)
+    //     if (output_path.size() >= 2 && output_path.compare(output_path.size()
+    //     - 2, 2, ".o") == 0)
     //         return OutputFormat::Object;
     //     return OutputFormat::Assembly;
     // }
 
     static void print_help(std::ostream &os, const char *argv0) {
         os << "Usage: " << argv0
-        << " [options] <model.onnx> (-o [path.o] | -S [path.s] | -l [path.ll] | -G [path.png]) \n"
-            "\n"
-            "Options:\n"
-            "  -h, --help              Show this help\n"
-            "  -o [path.o]             Create object file. Default: results/out.o\n"
-            "  -S [path.s]             Create assembly file. Default: results/out.s\n"
-            "  -l [path.ll]            LLVM IR output. Default: results/out.ll\n"
-            "  -G [path.png]           Compute graph image (Graphviz PNG). Default: results/graph.png\n"
-            "  --llvm-triple=TRIPLE    LLVM target triple\n"
-            "  --llvm-cpu=CPU          LLVM target CPU\n"
-            "  --llvm-features=STR     LLVM subtarget features string\n"
-            "  --reloc=pic|static|default  Relocation model (default: pic)\n"
-            "\n"
-            "Examples:\n"
-            "  " << argv0 << " model.onnx -o out.o\n"
-            "  " << argv0 << " -S model.onnx -o out.o   # writes results/out.s\n";
+           << " [options] <model.onnx> (-o [path.o] | -S [path.s] | -l "
+              "[path.ll] | -G [path.png]) "
+              "\n"
+              "\n"
+              "Options:\n"
+              "  -h, --help              Show this help\n"
+              "  -o [path.o]             Create object file. Default: "
+              "results/out.o\n"
+              "  -S [path.s]             Create assembly file. Default: "
+              "results/out.s\n"
+              "  -l [path.ll]            LLVM IR output. Default: "
+              "results/out.ll\n"
+              "  -G [path.png]           Compute graph image (Graphviz PNG). "
+              "Default: "
+              "results/graph.png\n"
+              "  --llvm-triple=TRIPLE    LLVM target triple\n"
+              "  --llvm-cpu=CPU          LLVM target CPU\n"
+              "  --llvm-features=STR     LLVM subtarget features string\n"
+              "  --reloc=pic|static|default  Relocation model (default: pic)\n"
+              "\n"
+              "Examples:\n"
+              "  "
+           << argv0
+           << " model.onnx -o out.o\n"
+              "  "
+           << argv0 << " -S model.onnx -o out.o   # writes results/out.s\n";
     }
 };
 

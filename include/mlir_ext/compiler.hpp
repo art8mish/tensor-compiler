@@ -52,6 +52,7 @@
 #include "mlir/Dialect/Arith/Transforms/BufferizableOpInterfaceImpl.h"
 #include "mlir/Dialect/Linalg/Transforms/BufferizableOpInterfaceImpl.h"
 #include "mlir/Dialect/SCF/Transforms/BufferizableOpInterfaceImpl.h"
+#include "mlir/Dialect/Tensor/IR/TensorInferTypeOpInterfaceImpl.h"
 #include "mlir/Dialect/Tensor/Transforms/BufferizableOpInterfaceImpl.h"
 
 namespace tensor_compiler {
@@ -84,6 +85,7 @@ public:
                     mlir::math::MathDialect, mlir::memref::MemRefDialect, mlir::scf::SCFDialect,
                     mlir::tensor::TensorDialect>();
 
+        mlir::tensor::registerInferTypeOpInterfaceExternalModels(registry);
         mlir::arith::registerBufferizableOpInterfaceExternalModels(registry);
         mlir::linalg::registerBufferizableOpInterfaceExternalModels(registry);
         mlir::tensor::registerBufferizableOpInterfaceExternalModels(registry);
@@ -133,10 +135,8 @@ public:
         return llvm_mod;
     }
 
-
-
     static void compile(llvm::Module &mod, const std::string &path, OutputFormat format,
-                          const LLVMOptions &opts) {
+                        const LLVMOptions &opts) {
         std::string triple_str = opts.triple.value_or(llvm::sys::getDefaultTargetTriple());
         llvm::Triple triple(triple_str);
 

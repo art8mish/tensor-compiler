@@ -1,21 +1,21 @@
 
 
-#include "cli.hpp"
 #include "cgraph.hpp"
+#include "cli.hpp"
 #include "factory.hpp"
-#include "mlir_ext/graph.hpp"
-#include "mlir_ext/factory.hpp"
 #include "mlir_ext/compiler.hpp"
+#include "mlir_ext/factory.hpp"
+#include "mlir_ext/graph.hpp"
 #include "viz/cg_draw.hpp"
 #include <ctime>
 #include <filesystem>
 #include <iostream>
 #include <llvm/IR/LLVMContext.h>
-#include <llvm/Support/raw_os_ostream.h> 
+#include <llvm/Support/raw_os_ostream.h>
 #include <stdexcept>
 #include <string>
 
-namespace tc=tensor_compiler;
+namespace tc = tensor_compiler;
 
 #ifndef NDEBUG
 #endif
@@ -45,8 +45,7 @@ int main(int argc, char **argv) {
 
         std::cout << "Converting graph to MLIR...\n";
         auto mlir_g = tc::MLIRComputeGraphFactory::create(*graph, "mlir_graph");
-    
-        
+
         std::cout << "Converting MLIR to LLVM IR...\n";
         tc::MLIRCompiler compiler;
         llvm::LLVMContext llvm_ctx;
@@ -71,7 +70,7 @@ int main(int argc, char **argv) {
             compiler.compile(*llvm_mod, *cli.out_asm, tc::OutputFormat::Assembly, cli.llvm_opts);
             std::cout << "Assembly file writed: " << *cli.out_path << std::endl;
         }
-        
+
         if (cli.out_path) {
             std::cout << "Compiling LLVM IR to object...\n";
             compiler.compile(*llvm_mod, *cli.out_path, tc::OutputFormat::Object, cli.llvm_opts);

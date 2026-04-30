@@ -1,10 +1,10 @@
 #pragma once
 
+#include "nodes/types.hpp"
+#include "viz/drawable.hpp"
 #include <graphviz/cgraph.h>
 #include <graphviz/gvc.h>
 #include <string>
-#include "viz/drawable.hpp"
-#include "nodes/types.hpp"
 
 namespace tensor_compiler {
 

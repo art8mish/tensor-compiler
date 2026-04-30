@@ -105,7 +105,7 @@ cmake --build build -j$(nproc)
 mkdir obj
 ./build/tcompiler -o obj/model.o <path/to/model.onnx>
 g++ -std=c++20 -c src/driver.cpp -o obj/driver.o
-g++ obj/driver.o obj/model.o -o model
+g++ obj/driver.o obj/model.o -o model -lmlir_c_runner_utils
 ./model
 ```
 
@@ -121,6 +121,8 @@ ctest --test-dir build
 ## Генерация ONNX
 
 Генерация тестовой ONNX модели для сценария end-to-end представлена в файле [end2end/gen.py](end2end/gen.py). С помощью скрипта можно генерировать модель (по умолчанию в `models/model.onnx`). Инференс модели производится с помощью **PyTorch** скриптом [end2end/pytorch_reference.py](end2end/pytorch_reference.py).
+
+Расширенное описание представлено в [docs/inference.md](docs/inference.md)
 
 
 ## CLI (tcompiler)
@@ -167,10 +169,22 @@ llc --relocation-model=pic -O3 -filetype=obj obj/optimized.ll -o obj/opt_model.o
 А затем скомпилировать и слинковать драйвер:
 ```shell
 g++ -std=c++20 -fPIE -c src/driver.cpp -o obj/driver.o
-g++ obj/driver.o obj/opt_model.o -o opt_model
+g++ obj/driver.o obj/opt_model.o -o opt_model -lmlir_c_runner_utils
 ./opt_model
 ```
 
-## Особенности
+## Ограничения
 
-На данном этапе при переводе в MLIR не поддерживается броадкастинг размерностей тензоров для операций, т.е. размерности должны соотноситься четко. Для визуализации броадкастинг доступен, но при переводе в MLIR или LLVM возникнет ошибка несоответствия размерностей.
+В текущей версии компилятора и загрузчика ONNX существуют ограничения. Граф может быть частично построен в `ComputeGraph`, но понижение до MLIR/LLVM не покрывает все комбинации.
+
+- Поддерживаются только узлы типов **Conv**, **Gemm**, **MatMul**, **Add**, **Mul**, **Relu** (см. `ComputeGraphFactory`).
+- При построении MLIR элементы тензоров приводятся к **f32**.
+- Не поддерживаются динамические (`?` в ONNX) и неполные размеры при генерации кода
+
+- Операции **Add** и **Mul** в MLIR строятся как `linalg.add` / `linalg.mul` с операндами одинакового ранга без броадкаста (например, `(N,C,H,W) + (1,C,1,1)` не поддерживается).
+
+- В MLIR для создания **Conv** используется `linalg.conv_2d_nchw_fchw`, ожидается двумерная свёртка по пространственным осям, ранг тензора 4 (`[N, C, H, W]`). Другие раскладки (NHWC) и 1D/3D свёртки в компиляторе не поддерживаются.
+
+- Для **MatMul** при ранге операндов $\leq 2$ используется `linalg.matmul`. При ранге $\geq 3$ узел создается через `linalg.generic` с размерностями $(..., M, K) \times (..., K, N)$.
+
+- Драйвер `model_driver` и пример в репозитории завязаны на конкретный вход/выход модели; при смене форм нужно править [src/driver.cpp](src/driver.cpp) и при необходимости скрипты end-to-end.

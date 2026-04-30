@@ -11,8 +11,8 @@
 #include <type_traits>
 #include <vector>
 
-#include <viz/drawable.hpp>
 #include <tensor/dtype.hpp>
+#include <viz/drawable.hpp>
 
 namespace tensor_compiler {
 
@@ -58,23 +58,23 @@ class Tensor : public Drawable {
         return data_.has_value();
     }
 
-    template <typename T>
-    Agnode_t* draw_impl(Agraph_t* g, std::string name = "") const {
+    template <typename T> Agnode_t *draw_impl(Agraph_t *g, std::string name = "") const {
         std::string shape_str = "[";
         for (size_t i = 0; i < shape_.size(); ++i) {
             shape_str += std::to_string(shape_[i]) + (i == shape_.size() - 1 ? "" : ", ");
         }
         shape_str += "]";
 
-        std::string html = "<TABLE BORDER=\"0\" CELLBORDER=\"1\" CELLSPACING=\"0\" CELLPADDING=\"4\">";
+        std::string html = "<TABLE BORDER=\"0\" CELLBORDER=\"1\" "
+                           "CELLSPACING=\"0\" CELLPADDING=\"4\">";
         html += "<TR><TD COLSPAN=\"4\" BGCOLOR=\"#EEEEEE\"><B>Tensor";
         if (!name.empty())
             html += " (" + name + ")";
         html += "</B></TD></TR>";
-        html += "<TR><TD COLSPAN=\"4\">DType: " + 
-                dtype_to_string(dtype_) + " | Shape: " + shape_str + "</TD></TR>";
+        html += "<TR><TD COLSPAN=\"4\">DType: " + dtype_to_string(dtype_) +
+                " | Shape: " + shape_str + "</TD></TR>";
 
-        const T* tensor_data = data<T>();
+        const T *tensor_data = data<T>();
         if (tensor_data != nullptr && !empty()) {
             size_t total_elements = size();
             size_t limit = 16;
@@ -82,7 +82,7 @@ class Tensor : public Drawable {
 
             html += "<TR>";
             for (size_t i = 0; i < to_draw; ++i) {
-                if (i > 0 && i % 4 == 0) 
+                if (i > 0 && i % 4 == 0)
                     html += "</TR><TR>";
 
                 html += "<TD>";
@@ -94,20 +94,19 @@ class Tensor : public Drawable {
             }
 
             if (total_elements > limit) {
-                html += "</TR><TR><TD COLSPAN=\"4\" BGCOLOR=\"#F5F5F5\">... and " + 
+                html += "</TR><TR><TD COLSPAN=\"4\" BGCOLOR=\"#F5F5F5\">... and " +
                         std::to_string(total_elements - limit) + " more</TD>";
             }
             html += "</TR>";
         } else {
             std::string status = (is_dynamic()) ? "Dynamic" : "Empty";
-            html += "<TR><TD COLSPAN=\"4\">"+ status + "</TD></TR>";
+            html += "<TR><TD COLSPAN=\"4\">" + status + "</TD></TR>";
         }
 
         html += "</TABLE>";
         std::string html_label = html;
         return Drawable::draw(g, html_label, "none");
     }
-
 
 public:
     Tensor() = default;
@@ -232,23 +231,28 @@ public:
         std::copy(begin, end, dest);
     }
 
-    
-
-    Agnode_t* draw(Agraph_t* g, std::string name) const {
+    Agnode_t *draw(Agraph_t *g, std::string name) const {
         switch (dtype_) {
-            case DataType::FLOAT32: return draw_impl<DataType_t<DataType::FLOAT32>>(g, name);
-            case DataType::FLOAT64: return draw_impl<DataType_t<DataType::FLOAT64>>(g, name);
-            case DataType::INT32:   return draw_impl<DataType_t<DataType::INT32>>(g, name);
-            case DataType::INT64:   return draw_impl<DataType_t<DataType::INT64>>(g, name);
-            case DataType::INT8:   return draw_impl<DataType_t<DataType::INT8>>(g, name);
-            case DataType::UINT8:   return draw_impl<DataType_t<DataType::UINT8>>(g, name);
-            case DataType::BOOL:   return draw_impl<DataType_t<DataType::BOOL>>(g, name);
-            default:
-                return draw_impl<int32_t>(g, name); 
+        case DataType::FLOAT32:
+            return draw_impl<DataType_t<DataType::FLOAT32>>(g, name);
+        case DataType::FLOAT64:
+            return draw_impl<DataType_t<DataType::FLOAT64>>(g, name);
+        case DataType::INT32:
+            return draw_impl<DataType_t<DataType::INT32>>(g, name);
+        case DataType::INT64:
+            return draw_impl<DataType_t<DataType::INT64>>(g, name);
+        case DataType::INT8:
+            return draw_impl<DataType_t<DataType::INT8>>(g, name);
+        case DataType::UINT8:
+            return draw_impl<DataType_t<DataType::UINT8>>(g, name);
+        case DataType::BOOL:
+            return draw_impl<DataType_t<DataType::BOOL>>(g, name);
+        default:
+            return draw_impl<int32_t>(g, name);
         }
     }
 
-    Agnode_t* draw(Agraph_t* g) const override {
+    Agnode_t *draw(Agraph_t *g) const override {
         return draw(g, "");
     }
 };

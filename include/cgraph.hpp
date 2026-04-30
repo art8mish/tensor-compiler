@@ -1,13 +1,13 @@
 #pragma once
 
 #include "nodes/node.hpp"
-#include "nodes/tensor_node.hpp"
 #include "nodes/operations.hpp"
+#include "nodes/tensor_node.hpp"
 #include "tensor/tensor.hpp"
 #include <list>
 #include <memory>
-#include <type_traits>
 #include <ranges>
+#include <type_traits>
 
 namespace tensor_compiler {
 
@@ -36,17 +36,14 @@ public:
         return ptr;
     }
 
-
     auto nodes() const {
-        return nodes_ | std::views::transform([](const auto& ptr) -> const Node* {
-            return ptr.get();
-        });
+        return nodes_ |
+               std::views::transform([](const auto &ptr) -> const Node * { return ptr.get(); });
     }
 
     auto tensors() const {
-        return tensors_ | std::views::transform([](const auto& ptr) -> const Tensor* {
-            return ptr.get();
-        });
+        return tensors_ |
+               std::views::transform([](const auto &ptr) -> const Tensor * { return ptr.get(); });
     }
 
     size_t node_count() const {

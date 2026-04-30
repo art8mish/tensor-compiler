@@ -62,6 +62,7 @@ set(MLIR_LIBS
     
     MLIRVectorDialect
     MLIRTensorDialect
+    MLIRTensorInferTypeOpInterfaceImpl
     MLIRLinalgDialect
     MLIRLinalgUtils
     MLIRArithDialect
@@ -152,7 +153,7 @@ if(BUILD_MODEL_DRIVER)
         ${MLIR_INCLUDE_DIRS}
     )
     target_compile_features(${MODEL_DRIVER} PRIVATE cxx_std_20)
-    target_link_libraries(${MODEL_DRIVER} PRIVATE ${MODEL_OBJ_PATH})
+    target_link_libraries(${MODEL_DRIVER} PRIVATE ${MODEL_OBJ_PATH} mlir_c_runner_utils)
     target_compile_definitions(${MODEL_DRIVER} PRIVATE ${LLVM_DEFINITIONS})
     add_dependencies(${MODEL_DRIVER} ${MODEL_OBJ})
 endif()

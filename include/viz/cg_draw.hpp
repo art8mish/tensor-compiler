@@ -9,7 +9,6 @@
 
 namespace tensor_compiler {
 
-
 void draw_compute_graph(const ComputeGraph &graph, const std::string &output_file) {
     GVC_t *gvc = gvContext();
     if (!gvc)
@@ -23,7 +22,8 @@ void draw_compute_graph(const ComputeGraph &graph, const std::string &output_fil
 
     agsafeset(g, const_cast<char *>("rankdir"), const_cast<char *>("TB"), const_cast<char *>(""));
     agsafeset(g, const_cast<char *>("nodesep"), const_cast<char *>("0.5"), const_cast<char *>(""));
-    agsafeset(g, const_cast<char *>("overlap"), const_cast<char *>("false"), const_cast<char *>(""));
+    agsafeset(g, const_cast<char *>("overlap"), const_cast<char *>("false"),
+              const_cast<char *>(""));
     agsafeset(g, const_cast<char *>("splines"), const_cast<char *>("true"), const_cast<char *>(""));
 
     try {
@@ -33,9 +33,12 @@ void draw_compute_graph(const ComputeGraph &graph, const std::string &output_fil
             throw std::runtime_error("Graphviz layout failed");
 
         std::string format = "png";
-        if (output_file.find(".svg") != std::string::npos) format = "svg";
-        else if (output_file.find(".pdf") != std::string::npos) format = "pdf";
-        else if (output_file.find(".dot") != std::string::npos) format = "canon";
+        if (output_file.find(".svg") != std::string::npos)
+            format = "svg";
+        else if (output_file.find(".pdf") != std::string::npos)
+            format = "pdf";
+        else if (output_file.find(".dot") != std::string::npos)
+            format = "canon";
 
         if (gvRenderFilename(gvc, g, format.c_str(), output_file.c_str()) != 0)
             throw std::runtime_error("Graphviz rendering failed");

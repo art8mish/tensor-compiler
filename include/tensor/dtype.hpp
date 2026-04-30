@@ -17,19 +17,31 @@ namespace tensor_compiler {
 
 enum class DataType { FLOAT32, FLOAT64, INT32, INT64, INT8, UINT8, BOOL, UNDEFINED };
 
+template <DataType D> struct DataType2Type;
 
-template<DataType D> struct DataType2Type;
+template <> struct DataType2Type<DataType::FLOAT32> {
+    using type = float;
+};
+template <> struct DataType2Type<DataType::FLOAT64> {
+    using type = double;
+};
+template <> struct DataType2Type<DataType::INT32> {
+    using type = int32_t;
+};
+template <> struct DataType2Type<DataType::INT64> {
+    using type = int64_t;
+};
+template <> struct DataType2Type<DataType::INT8> {
+    using type = int8_t;
+};
+template <> struct DataType2Type<DataType::UINT8> {
+    using type = uint8_t;
+};
+template <> struct DataType2Type<DataType::BOOL> {
+    using type = bool;
+};
 
-template<> struct DataType2Type<DataType::FLOAT32> { using type = float; };
-template<> struct DataType2Type<DataType::FLOAT64> { using type = double; };
-template<> struct DataType2Type<DataType::INT32>   { using type = int32_t; };
-template<> struct DataType2Type<DataType::INT64>   { using type = int64_t; };
-template<> struct DataType2Type<DataType::INT8>    { using type = int8_t; };
-template<> struct DataType2Type<DataType::UINT8>   { using type = uint8_t; };
-template<> struct DataType2Type<DataType::BOOL>    { using type = bool; };
-
-template<DataType D>
-using DataType_t = typename DataType2Type<D>::type;
+template <DataType D> using DataType_t = typename DataType2Type<D>::type;
 
 size_t get_dtype_size(DataType dtype) {
     switch (dtype) {

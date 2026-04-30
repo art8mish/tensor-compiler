@@ -59,14 +59,14 @@ public:
 };
 
 class ConvNode : public OpNode {
-    TensorNode * in_X;
-    TensorNode * in_W;
-    TensorNode * in_Bias; // can be nullptr
+    TensorNode *in_X;
+    TensorNode *in_W;
+    TensorNode *in_Bias; // can be nullptr
 
     size_t dim_;
     std::vector<int64_t> kernel_shape_; // [x1_size, x2_size, ...]
-    std::vector<int64_t> strides_;       // [x1_stride, x2_stride, ...]
-    std::vector<int64_t> dilations_;     // [x1_dilation, x2_dilation, ...]
+    std::vector<int64_t> strides_;      // [x1_stride, x2_stride, ...]
+    std::vector<int64_t> dilations_;    // [x1_dilation, x2_dilation, ...]
     std::vector<int64_t> pads_;         // [x1_begin, x2_begin, ..., x1_end, x2_end, ...]
     uint64_t group_ = 1;
 
@@ -78,16 +78,16 @@ class ConvNode : public OpNode {
             throw std::invalid_argument("ConvNode: kernel dimension can't be a zero");
 
         if (strides_.size() != dim_)
-            throw std::invalid_argument(
-                "ConvNode: strides dimension is incompatible with kernel dimension");
+            throw std::invalid_argument("ConvNode: strides dimension is "
+                                        "incompatible with kernel dimension");
 
         if (dilations_.size() != dim_)
-            throw std::invalid_argument(
-                "ConvNode: dilations dimension is incompatible with kernel dimension");
+            throw std::invalid_argument("ConvNode: dilations dimension is "
+                                        "incompatible with kernel dimension");
 
         if (pads_.size() != dim_ * 2)
-            throw std::invalid_argument(
-                "ConvNode: pads dimension is incompatible with kernel dimension");
+            throw std::invalid_argument("ConvNode: pads dimension is "
+                                        "incompatible with kernel dimension");
 
         const auto &x_shape = in_X->shape();
         const auto &w_shape = in_W->shape();
@@ -109,8 +109,8 @@ class ConvNode : public OpNode {
             const auto &b_shape = in_Bias->shape();
             // w_shape[0] = out_Channels
             if (b_shape.size() != 1 || b_shape[0] != w_shape[0])
-                throw std::invalid_argument(
-                    "ConvNode: Bias shape is incompatible with output channels");
+                throw std::invalid_argument("ConvNode: Bias shape is incompatible with output "
+                                            "channels");
         }
     }
 
@@ -148,8 +148,8 @@ class ConvNode : public OpNode {
     }
 
 public:
-    ConvNode(std::string name, std::vector<int64_t> kernel_shape, TensorNode * X, TensorNode * W,
-             TensorNode * bias = {}, std::vector<int64_t> strides = {},
+    ConvNode(std::string name, std::vector<int64_t> kernel_shape, TensorNode *X, TensorNode *W,
+             TensorNode *bias = {}, std::vector<int64_t> strides = {},
              std::vector<int64_t> dilations = {}, std::vector<int64_t> pads = {},
              uint64_t group = 1)
         : OpNode(std::move(name), NodeType::CONV), in_X{X}, in_W{W}, in_Bias{bias},
@@ -176,16 +176,22 @@ public:
         return {in_X, in_W, in_Bias};
     }
 
-    const std::vector<int64_t>& getStrides() const { return strides_; }
-    const std::vector<int64_t>& getDilations() const { return dilations_; }
-    const std::vector<int64_t>& getPads() const { return pads_; }
+    const std::vector<int64_t> &getStrides() const {
+        return strides_;
+    }
+    const std::vector<int64_t> &getDilations() const {
+        return dilations_;
+    }
+    const std::vector<int64_t> &getPads() const {
+        return pads_;
+    }
 };
 
 // Gemm: Y = alpha*A*B + beta*C)
 class GemmNode : public OpNode {
-    TensorNode * in_A;
-    TensorNode * in_B;
-    TensorNode * in_C; // can be nullptr
+    TensorNode *in_A;
+    TensorNode *in_B;
+    TensorNode *in_C; // can be nullptr
 
     double alpha_;
     double beta_;
@@ -213,8 +219,8 @@ class GemmNode : public OpNode {
         dim_t j = trB_ ? shape_B[0] : shape_B[1]; // B cols
 
         if (k_A != k_B) {
-            throw std::invalid_argument(
-                "GemmNode: inner dimensions of A and B are incompatible after transpose");
+            throw std::invalid_argument("GemmNode: inner dimensions of A and B "
+                                        "are incompatible after transpose");
         }
 
         if (in_C) {
@@ -244,9 +250,8 @@ class GemmNode : public OpNode {
     }
 
 public:
-    GemmNode(std::string name, TensorNode * A, TensorNode * B, TensorNode * C = {},
-             double alpha = 1.0, double beta = 1.0, bool transpose_A = false,
-             bool transpose_B = false)
+    GemmNode(std::string name, TensorNode *A, TensorNode *B, TensorNode *C = {}, double alpha = 1.0,
+             double beta = 1.0, bool transpose_A = false, bool transpose_B = false)
         : OpNode(std::move(name), NodeType::GEMM), in_A{A}, in_B{B}, in_C{C}, alpha_{alpha},
           beta_{beta}, trA_{transpose_A}, trB_{transpose_B} {
         validate();
@@ -271,8 +276,8 @@ public:
 };
 
 class MatMulNode : public OpNode {
-    TensorNode * in_A;
-    TensorNode * in_B;
+    TensorNode *in_A;
+    TensorNode *in_B;
 
     void validate() {
         if (!in_A || !in_B)
@@ -300,8 +305,8 @@ class MatMulNode : public OpNode {
                 dim_t dim_A = shape_A[batch_rank_A - i];
                 dim_t dim_B = shape_B[batch_rank_B - i];
                 if (dim_A != dim_B && dim_A != 1 && dim_B != 1)
-                    throw std::invalid_argument(
-                        "MatMulNode: batch dimensions are incompatible for broadcasting");
+                    throw std::invalid_argument("MatMulNode: batch dimensions are incompatible for "
+                                                "broadcasting");
             }
         }
     }
@@ -336,7 +341,7 @@ class MatMulNode : public OpNode {
     }
 
 public:
-    MatMulNode(std::string name, TensorNode * A, TensorNode * B)
+    MatMulNode(std::string name, TensorNode *A, TensorNode *B)
         : OpNode(std::move(name), NodeType::MATMUL), in_A{A}, in_B{B} {
         validate();
     }
@@ -347,8 +352,8 @@ public:
 };
 
 class AddNode : public OpNode {
-    TensorNode * in_A;
-    TensorNode * in_B;
+    TensorNode *in_A;
+    TensorNode *in_B;
 
     void validate() {
         if (!in_A || !in_B)
@@ -395,7 +400,7 @@ class AddNode : public OpNode {
     }
 
 public:
-    AddNode(std::string name, TensorNode * A, TensorNode * B)
+    AddNode(std::string name, TensorNode *A, TensorNode *B)
         : OpNode(std::move(name), NodeType::ADD), in_A{A}, in_B{B} {
         validate();
     }
@@ -406,8 +411,8 @@ public:
 };
 
 class MulNode : public OpNode {
-    TensorNode * in_A;
-    TensorNode * in_B;
+    TensorNode *in_A;
+    TensorNode *in_B;
 
     void validate() {
         if (!in_A || !in_B)
@@ -454,7 +459,7 @@ class MulNode : public OpNode {
     }
 
 public:
-    MulNode(const std::string &name, TensorNode * A, TensorNode * B)
+    MulNode(const std::string &name, TensorNode *A, TensorNode *B)
         : OpNode(name, NodeType::MUL), in_A{A}, in_B{B} {
         validate();
     }
@@ -465,7 +470,7 @@ public:
 };
 
 class ReluNode : public OpNode {
-    TensorNode * in_A;
+    TensorNode *in_A;
 
     void validate() {
         if (!in_A)
@@ -476,9 +481,8 @@ class ReluNode : public OpNode {
         return in_A->shape();
     }
 
-
 public:
-    ReluNode(const std::string &name, TensorNode * A) : OpNode(name, NodeType::RELU), in_A{A} {
+    ReluNode(const std::string &name, TensorNode *A) : OpNode(name, NodeType::RELU), in_A{A} {
         validate();
     }
 
