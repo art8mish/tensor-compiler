@@ -5,6 +5,7 @@
 #include "nodes/operations.hpp"
 #include "nodes/tensor_node.hpp"
 #include "tensor/tensor.hpp"
+#include <cstdint>
 #include <gtest/gtest.h>
 #include <memory>
 #include <string>
@@ -37,7 +38,7 @@ TEST_F(TestTensorCompiler, TensorAllocation) {
 
 TEST_F(TestTensorCompiler, TensorReshape) {
     Tensor t({4, 4}, DataType::INT32);
-    std::vector<int32_t> data(16, 1);
+    std::vector<std::int32_t> data(16, 1);
     t.set_data(data);
 
     EXPECT_NO_THROW(t.reshape({2, 8}));
@@ -49,7 +50,7 @@ TEST_F(TestTensorCompiler, TensorReshape) {
 
 TEST_F(TestTensorCompiler, TensorTypeMismatch) {
     Tensor t({1}, DataType::FLOAT32);
-    std::vector<int32_t> wrong_data = {1};
+    std::vector<std::int32_t> wrong_data = {1};
 
     EXPECT_THROW(t.set_data(wrong_data), std::runtime_error);
 }
@@ -106,7 +107,8 @@ TEST_F(TestTensorCompiler, AddGraphStructure) {
     add->set_out_tensor(out_n);
     out_n->set_input(add);
 
-    EXPECT_EQ(graph.nodes().size(), 5u);
+    EXPECT_EQ(graph.node_count(), 4u);
+    EXPECT_EQ(graph.tensor_count(), 3u);
     EXPECT_EQ(add->inputs().size(), 2u);
     EXPECT_EQ(add->output(), out_n);
 }

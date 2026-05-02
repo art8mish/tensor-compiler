@@ -1,3 +1,4 @@
 onnx
 numpy
 torch
+matplotlib

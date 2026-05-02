@@ -6,6 +6,7 @@
 #include "nodes/tensor_node.hpp"
 #include "tensor/tensor.hpp"
 #include <cassert>
+#include <cstdint>
 #include <cstring>
 #include <fstream>
 #include <memory>
@@ -17,7 +18,7 @@
 namespace tensor_compiler {
 
 class ComputeGraphFactory {
-    static DataType onnx_dtype(int32_t onnx_type) {
+    static DataType onnx_dtype(std::int32_t onnx_type) {
         switch (onnx_type) {
         case onnx::TensorProto::FLOAT:
             return DataType::FLOAT32;
@@ -50,8 +51,7 @@ class ComputeGraphFactory {
         tensor.template set_data<T>(field.begin(), field.end());
     }
 
-    template <typename T>
-    static void fill_tensor_raw_data(Tensor &tensor, const std::string &raw) {
+    template <typename T> static void fill_tensor_raw_data(Tensor &tensor, const std::string &raw) {
         const size_t elem_num = tensor.size();
         const size_t expected_bytes = elem_num * sizeof(T);
         if (raw.size() != expected_bytes)
@@ -72,28 +72,28 @@ class ComputeGraphFactory {
         if (initializer.has_raw_data()) {
             const std::string &raw = initializer.raw_data();
             switch (dtype) {
-                case DataType::FLOAT32:
-                    fill_tensor_raw_data<float>(tensor, raw);
-                    break;
-                case DataType::FLOAT64:
-                    fill_tensor_raw_data<double>(tensor, raw);
-                    break;
-                case DataType::INT32:
-                    fill_tensor_raw_data<int32_t>(tensor, raw);
-                    break;
-                case DataType::INT64:
-                    fill_tensor_raw_data<int64_t>(tensor, raw);
-                    break;
-                case DataType::INT8:
-                    fill_tensor_raw_data<int8_t>(tensor, raw);
-                    break;
-                case DataType::UINT8:
-                    fill_tensor_raw_data<uint8_t>(tensor, raw);
-                    break;
-                case DataType::BOOL:
-                    throw std::runtime_error("Tensor raw_data for BOOL is not supported");
-                default:
-                    throw std::runtime_error("Tensor raw_data type is not supported");
+            case DataType::FLOAT32:
+                fill_tensor_raw_data<float>(tensor, raw);
+                break;
+            case DataType::FLOAT64:
+                fill_tensor_raw_data<double>(tensor, raw);
+                break;
+            case DataType::INT32:
+                fill_tensor_raw_data<std::int32_t>(tensor, raw);
+                break;
+            case DataType::INT64:
+                fill_tensor_raw_data<std::int64_t>(tensor, raw);
+                break;
+            case DataType::INT8:
+                fill_tensor_raw_data<std::int8_t>(tensor, raw);
+                break;
+            case DataType::UINT8:
+                fill_tensor_raw_data<std::uint8_t>(tensor, raw);
+                break;
+            case DataType::BOOL:
+                throw std::runtime_error("Tensor raw_data for BOOL is not supported");
+            default:
+                throw std::runtime_error("Tensor raw_data type is not supported");
             }
             return;
         }
@@ -106,10 +106,10 @@ class ComputeGraphFactory {
             fill_tensor_data<double>(tensor, initializer.double_data());
             break;
         case DataType::INT32:
-            fill_tensor_data<int32_t>(tensor, initializer.int32_data());
+            fill_tensor_data<std::int32_t>(tensor, initializer.int32_data());
             break;
         case DataType::INT64:
-            fill_tensor_data<int64_t>(tensor, initializer.int64_data());
+            fill_tensor_data<std::int64_t>(tensor, initializer.int64_data());
             break;
         default:
             throw std::runtime_error("Tensor data type is not supported");
@@ -122,14 +122,14 @@ class ComputeGraphFactory {
         if (inputs.size() < 2)
             throw std::runtime_error("Conv: need at least X and W inputs");
 
-        std::vector<int64_t> kernel_shape, strides, dilations, pads;
-        uint64_t group = 1;
+        std::vector<std::int64_t> kernel_shape, strides, dilations, pads;
+        std::uint64_t group = 1;
 
         for (const auto &attr : node_proto.attribute()) {
-            auto fill_vec = [](std::vector<int64_t> &vec, const auto &attr_proto) {
+            auto fill_vec = [](std::vector<std::int64_t> &vec, const auto &attr_proto) {
                 vec.reserve(static_cast<size_t>(attr_proto.ints_size()));
                 for (auto v : attr_proto.ints())
-                    vec.push_back(static_cast<int64_t>(v));
+                    vec.push_back(static_cast<std::int64_t>(v));
             };
             if (attr.name() == "kernel_shape")
                 fill_vec(kernel_shape, attr);
@@ -140,7 +140,7 @@ class ComputeGraphFactory {
             else if (attr.name() == "pads")
                 fill_vec(pads, attr);
             else if (attr.name() == "group")
-                group = static_cast<uint64_t>(attr.i());
+                group = static_cast<std::uint64_t>(attr.i());
         }
 
         TensorNode *X = inputs[0];

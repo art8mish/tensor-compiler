@@ -2,6 +2,10 @@
 
 Проект представляет из себя экспериментальный компилятор нейросетевых графов. 
 
+## Kernels
+
+В рамках проекта выполнено небольшое исследование по оптимизации операций `Gemm` и `Conv`, представленное в [kernels/readme.md](kernels/readme.md)
+
 ## Cхема работы
 
 Компилятор производит загрузку графа нейронной сети в формате **ONNX**, строит внутреннее представление `ComputeGraph`, переводит его в **MLIR** (диалекты *Linalg*, *Tensor*, *Arith* и др.), затем производит понижение до **LLVM IR**. Из **LLVM IR** могут быть сгенерированы: файл представления LLVM (`.ll`), ассемблер (`.s`) и объектный файл (`.o`). Опционально можно сохранить **PNG** визуализации графа через **Graphviz**.
@@ -85,13 +89,15 @@ pip install -r requirements.txt
 Файл представляет из себя реализацию тензорного компилятора
 
 ```shell
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
 cmake --build build -j$(nproc)
 ```
 
 Если компилятор не видит заголовки LLVM, следует указать флаг `-DCMAKE_PREFIX_PATH="/path/to/llvm-install"`
 
 Для генерации файла `compile_commands.json` в [CMakeLists.txt](CMakeLists.txt)по умолчанию`-DCMAKE_EXPORT_COMPILE_COMMANDS=ON`.
+
+> Чтобы добавить компиляцию `kernels` требуется указать опцию `-DBUILD_KERNELS=ON`
 
 > #### `build/model_driver`
 
@@ -115,7 +121,7 @@ g++ obj/driver.o obj/model.o -o model -lmlir_c_runner_utils
 
 Запуск тестов:
 ```shell
-ctest --test-dir build
+ctest --test-dir build --output-on-failure
 ```
 
 ## Генерация ONNX
@@ -123,7 +129,6 @@ ctest --test-dir build
 Генерация тестовой ONNX модели для сценария end-to-end представлена в файле [end2end/gen.py](end2end/gen.py). С помощью скрипта можно генерировать модель (по умолчанию в `models/model.onnx`). Инференс модели производится с помощью **PyTorch** скриптом [end2end/pytorch_reference.py](end2end/pytorch_reference.py).
 
 Расширенное описание представлено в [docs/inference.md](docs/inference.md)
-
 
 ## CLI (tcompiler)
 
@@ -188,3 +193,5 @@ g++ obj/driver.o obj/opt_model.o -o opt_model -lmlir_c_runner_utils
 - Для **MatMul** при ранге операндов $\leq 2$ используется `linalg.matmul`. При ранге $\geq 3$ узел создается через `linalg.generic` с размерностями $(..., M, K) \times (..., K, N)$.
 
 - Драйвер `model_driver` и пример в репозитории завязаны на конкретный вход/выход модели; при смене форм нужно править [src/driver.cpp](src/driver.cpp) и при необходимости скрипты end-to-end.
+
+- Сборка осуществляется в режиме `Debug`, так как в `Release` *cmake* использует агрессивные флаги оптимизации вроде `-O3`, ломающие MLIR, скорее всего вскоре это исправят

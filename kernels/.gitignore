@@ -1,0 +1,5 @@
+build/
+results/
+.venv/
+figures/
+/**/__pycache__/

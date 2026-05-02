@@ -26,16 +26,16 @@ template <> struct DataType2Type<DataType::FLOAT64> {
     using type = double;
 };
 template <> struct DataType2Type<DataType::INT32> {
-    using type = int32_t;
+    using type = std::int32_t;
 };
 template <> struct DataType2Type<DataType::INT64> {
-    using type = int64_t;
+    using type = std::int64_t;
 };
 template <> struct DataType2Type<DataType::INT8> {
-    using type = int8_t;
+    using type = std::int8_t;
 };
 template <> struct DataType2Type<DataType::UINT8> {
-    using type = uint8_t;
+    using type = std::uint8_t;
 };
 template <> struct DataType2Type<DataType::BOOL> {
     using type = bool;

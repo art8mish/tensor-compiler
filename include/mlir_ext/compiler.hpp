@@ -49,12 +49,6 @@
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/TargetParser/Host.h"
 
-#include "mlir/Dialect/Arith/Transforms/BufferizableOpInterfaceImpl.h"
-#include "mlir/Dialect/Linalg/Transforms/BufferizableOpInterfaceImpl.h"
-#include "mlir/Dialect/SCF/Transforms/BufferizableOpInterfaceImpl.h"
-#include "mlir/Dialect/Tensor/IR/TensorInferTypeOpInterfaceImpl.h"
-#include "mlir/Dialect/Tensor/Transforms/BufferizableOpInterfaceImpl.h"
-
 namespace tensor_compiler {
 
 enum class OutputFormat { Assembly, Object };
@@ -77,27 +71,7 @@ public:
     }
 
     std::unique_ptr<llvm::Module> build_llvm(MLIRComputeGraph &graph, llvm::LLVMContext &llvm_ctx) {
-        mlir::DialectRegistry registry;
-        registry
-            .insert<mlir::affine::AffineDialect, mlir::arith::ArithDialect,
-                    mlir::bufferization::BufferizationDialect, mlir::cf::ControlFlowDialect,
-                    mlir::func::FuncDialect, mlir::linalg::LinalgDialect, mlir::LLVM::LLVMDialect,
-                    mlir::math::MathDialect, mlir::memref::MemRefDialect, mlir::scf::SCFDialect,
-                    mlir::tensor::TensorDialect>();
-
-        mlir::tensor::registerInferTypeOpInterfaceExternalModels(registry);
-        mlir::arith::registerBufferizableOpInterfaceExternalModels(registry);
-        mlir::linalg::registerBufferizableOpInterfaceExternalModels(registry);
-        mlir::tensor::registerBufferizableOpInterfaceExternalModels(registry);
-        mlir::scf::registerBufferizableOpInterfaceExternalModels(registry);
-        mlir::bufferization::func_ext::registerBufferizableOpInterfaceExternalModels(registry);
-
-        mlir::registerBuiltinDialectTranslation(registry);
-        mlir::registerLLVMDialectTranslation(registry);
-
         auto &ctx = graph.context();
-        ctx.appendDialectRegistry(registry);
-        ctx.loadAllAvailableDialects();
 
         mlir::PassManager pm(&ctx);
 
@@ -124,6 +98,9 @@ public:
         pm.addPass(mlir::createReconcileUnrealizedCastsPass());
 
         auto module = graph.module();
+        if (mlir::failed(mlir::verify(module)))
+            throw std::runtime_error("MLIR module verification failed before passes");
+
         // module.dump();
         if (mlir::failed(pm.run(module)) || mlir::failed(mlir::verify(module)))
             throw std::runtime_error("Passing MLIR module to LLVM failed");

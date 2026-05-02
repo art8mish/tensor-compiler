@@ -5,6 +5,7 @@
 #include "nodes/operations.hpp"
 #include "nodes/tensor_node.hpp"
 
+#include <cstdint>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -51,7 +52,7 @@ public:
     }
 
     mlir::RankedTensorType get_tensor_type(const TensorNode *tensor) {
-        std::vector<int64_t> shape;
+        std::vector<std::int64_t> shape;
         for (auto d : tensor->shape())
             shape.push_back(d == DYNAMIC_DIM ? mlir::ShapedType::kDynamic : d);
         return mlir::RankedTensorType::get(shape, convert_type(tensor->dtype()));
@@ -158,25 +159,25 @@ public:
     }
 
     /// ONNX pads [begin_dim0, begin_dim1, …, end_dim0, end_dim1, …]
-    mlir::Value emit_onnx_pads(mlir::Location loc, mlir::Value X, const std::vector<int64_t> &pads,
-                               unsigned spatial_rank) {
+    mlir::Value emit_onnx_pads(mlir::Location loc, mlir::Value X,
+                               const std::vector<std::int64_t> &pads, unsigned spatial_rank) {
         if (pads.size() != static_cast<size_t>(spatial_rank) * 2)
             throw std::runtime_error("Conv pads list length must be 2 * spatial_rank");
 
-        if (llvm::all_of(pads, [](int64_t p) { return p == 0; }))
+        if (llvm::all_of(pads, [](std::int64_t p) { return p == 0; }))
             return X;
 
         auto rt = mlir::cast<mlir::RankedTensorType>(X.getType());
-        const int64_t rank = rt.getRank();
+        const std::int64_t rank = rt.getRank();
         if (rank < 2 || static_cast<size_t>(rank) < 2 + spatial_rank)
             throw std::runtime_error("Conv input rank incompatible with pads");
 
-        llvm::SmallVector<int64_t> new_shape(rt.getShape().begin(), rt.getShape().end());
-        llvm::SmallVector<int64_t> low_pad(static_cast<size_t>(rank), 0);
+        llvm::SmallVector<std::int64_t> new_shape(rt.getShape().begin(), rt.getShape().end());
+        llvm::SmallVector<std::int64_t> low_pad(static_cast<size_t>(rank), 0);
         for (unsigned i = 0; i < spatial_rank; ++i) {
             const unsigned dim_idx = static_cast<unsigned>(rank) - spatial_rank + i;
-            const int64_t pad_before = pads[i];
-            const int64_t pad_after = pads[i + spatial_rank];
+            const std::int64_t pad_before = pads[i];
+            const std::int64_t pad_after = pads[i + spatial_rank];
             new_shape[dim_idx] += pad_before + pad_after;
             low_pad[dim_idx] = pad_before;
         }
@@ -195,13 +196,13 @@ public:
                                          mlir::ValueRange{zero}, mlir::ValueRange{scratch})
                 .getResult(0);
 
-        llvm::SmallVector<int64_t> src_sizes(rt.getShape().begin(), rt.getShape().end());
-        llvm::SmallVector<int64_t> strides(static_cast<size_t>(rank), 1);
+        llvm::SmallVector<std::int64_t> src_sizes(rt.getShape().begin(), rt.getShape().end());
+        llvm::SmallVector<std::int64_t> strides(static_cast<size_t>(rank), 1);
 
         return mlir::tensor::InsertSliceOp::create(
                    builder_, loc, padded_ty, X, filled, mlir::ValueRange{}, mlir::ValueRange{},
-                   mlir::ValueRange{}, llvm::ArrayRef<int64_t>(low_pad),
-                   llvm::ArrayRef<int64_t>(src_sizes), llvm::ArrayRef<int64_t>(strides))
+                   mlir::ValueRange{}, llvm::ArrayRef<std::int64_t>(low_pad),
+                   llvm::ArrayRef<std::int64_t>(src_sizes), llvm::ArrayRef<std::int64_t>(strides))
             .getResult();
     }
 
@@ -247,15 +248,23 @@ public:
         switch (node_type) {
         case NodeType::RELU: {
             mlir::Value in_tensor = value_map_.at(inputs[0]);
-            result = mlir::linalg::MapOp::create(
-                         builder_, loc, mlir::ValueRange{in_tensor}, out_format,
+            const auto in_rt = mlir::cast<mlir::RankedTensorType>(in_tensor.getType());
+            const unsigned rank = static_cast<unsigned>(in_rt.getRank());
+            mlir::MLIRContext *ctx = builder_.getContext();
+            mlir::AffineMap id = mlir::AffineMap::getMultiDimIdentityMap(rank, ctx);
+            llvm::SmallVector<mlir::AffineMap> maps(2, id);
+            llvm::SmallVector<mlir::utils::IteratorType, 4> iterators(
+                rank, mlir::utils::IteratorType::parallel);
+            result = mlir::linalg::GenericOp::create(
+                         builder_, loc, mlir::TypeRange{out_tensor_type},
+                         mlir::ValueRange{in_tensor}, mlir::ValueRange{out_format}, maps, iterators,
                          [&](mlir::OpBuilder &b, mlir::Location l, mlir::ValueRange args) {
                              auto zero = mlir::arith::ConstantOp::create(
                                  b, l, b.getFloatAttr(args[0].getType(), 0.0));
                              auto max = mlir::arith::MaximumFOp::create(b, l, args[0], zero);
                              mlir::linalg::YieldOp::create(b, l, max.getResult());
                          })
-                         ->getResult(0);
+                         .getResult(0);
             break;
         }
 
@@ -320,10 +329,6 @@ public:
             auto strides = builder_.getI64ArrayAttr(convNode->getStrides());
             auto dilations = builder_.getI64ArrayAttr(convNode->getDilations());
 
-            // Optional bias is fused into the conv output accumulator (outs):
-            // linalg.conv accumulates onto outs, so initializing outs with
-            // broadcast bias yields bias + convolution without a separate
-            // linalg.add.
             mlir::Value conv_out_init = out_format;
             if (inputs.size() > 2 && inputs[2])
                 conv_out_init =
@@ -356,14 +361,14 @@ public:
 
         if (conv_out_ty.getRank() != 4)
             throw std::runtime_error("Conv bias expansion: expected 4D conv output type");
-        for (int64_t d : conv_out_ty.getShape()) {
+        for (std::int64_t d : conv_out_ty.getShape()) {
             if (d == mlir::ShapedType::kDynamic)
                 throw std::runtime_error("Conv bias: dynamic conv output dimension");
         }
 
         std::vector<float> bias_data = cast_data<float>(bias_node);
-        const int64_t c_out = conv_out_ty.getDimSize(1);
-        if (static_cast<int64_t>(bias_data.size()) != c_out)
+        const std::int64_t c_out = conv_out_ty.getDimSize(1);
+        if (static_cast<std::int64_t>(bias_data.size()) != c_out)
             throw std::runtime_error("Conv bias: expected " + std::to_string(c_out) +
                                      " values, got " + std::to_string(bias_data.size()));
 

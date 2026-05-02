@@ -16,14 +16,14 @@
 
 namespace tensor_compiler {
 
-using dim_t = int64_t;
+using dim_t = std::int64_t;
 const dim_t DYNAMIC_DIM = -1;
 using Shape = std::vector<dim_t>;
 
 class Tensor : public Drawable {
     Shape shape_;
     DataType dtype_;
-    std::optional<std::vector<uint8_t>> data_;
+    std::optional<std::vector<std::uint8_t>> data_;
 
     void validate() {
         validate_shape(shape_);
@@ -248,7 +248,7 @@ public:
         case DataType::BOOL:
             return draw_impl<DataType_t<DataType::BOOL>>(g, name);
         default:
-            return draw_impl<int32_t>(g, name);
+            return draw_impl<std::int32_t>(g, name);
         }
     }
 

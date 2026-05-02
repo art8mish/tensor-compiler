@@ -2,6 +2,13 @@ cmake_minimum_required(VERSION 3.16)
 set(TARGET tcompiler)
 project(${TARGET} LANGUAGES CXX)
 
+
+if(NOT CMAKE_CONFIGURATION_TYPES)
+    if(NOT CMAKE_BUILD_TYPE)
+        set(CMAKE_BUILD_TYPE Debug CACHE STRING "Build type" FORCE)
+    endif()
+endif()
+
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GRAPHVIZ REQUIRED IMPORTED_TARGET libgvc libcgraph)
@@ -85,7 +92,6 @@ set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set(INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
 set(TESTS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tests)
 
-
 function(add_exec target)
     add_executable(${target} ${ARGN})
     target_include_directories(${target} PRIVATE 
@@ -129,7 +135,9 @@ add_exec(${TARGET} ${SRC_DIR}/main.cpp)
 
 set(MODEL_ONNX_PATH "${CMAKE_SOURCE_DIR}/models/model.onnx")
 set(MODEL_OBJ_PATH "${CMAKE_CURRENT_BINARY_DIR}/model.o")
-option(BUILD_MODEL_DRIVER "Build ${MODEL_DRIVER} (links ${MODEL_OBJ_PATH}; requires ${MODEL_ONNX_PATH})" OFF)
+
+option(BUILD_KERNELS "Build kernels, kernel_tests, kernel_benchmark" OFF)
+option(BUILD_MODEL_DRIVER "Build model driver (links ${MODEL_OBJ_PATH}; requires ${MODEL_ONNX_PATH})" OFF)
 
 if(BUILD_MODEL_DRIVER)
     
@@ -164,5 +172,11 @@ endif()
 
 option(BUILD_TESTS "Build unit tests" ON)
 if(BUILD_TESTS)
+    enable_testing()
     add_subdirectory(${TESTS_DIR})
+endif()
+
+if(BUILD_KERNELS)
+    set(KERNELS_AS_SUBDIRECTORY TRUE)
+    add_subdirectory(${CMAKE_SOURCE_DIR}/kernels)
 endif()

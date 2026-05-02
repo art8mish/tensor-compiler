@@ -8,10 +8,29 @@
 #include "mlir_ext/builder.hpp"
 #include "mlir_ext/graph.hpp"
 
-// MLIR includes
-#include "mlir/Dialect/Func/IR/FuncOps.h"
-#include "mlir/IR/BuiltinAttributes.h"
-#include "mlir/IR/BuiltinOps.h"
+#include <mlir/Dialect/Affine/IR/AffineOps.h>
+#include <mlir/Dialect/Arith/IR/Arith.h>
+#include <mlir/Dialect/Bufferization/IR/Bufferization.h>
+#include <mlir/Dialect/ControlFlow/IR/ControlFlow.h>
+#include <mlir/Dialect/Func/IR/FuncOps.h>
+#include <mlir/Dialect/LLVMIR/LLVMDialect.h>
+#include <mlir/Dialect/Linalg/IR/Linalg.h>
+#include <mlir/Dialect/Math/IR/Math.h>
+#include <mlir/Dialect/MemRef/IR/MemRef.h>
+#include <mlir/Dialect/SCF/IR/SCF.h>
+#include <mlir/Dialect/Tensor/IR/Tensor.h>
+#include <mlir/IR/BuiltinAttributes.h>
+#include <mlir/IR/BuiltinOps.h>
+#include <mlir/IR/DialectRegistry.h>
+
+#include <mlir/Dialect/Arith/Transforms/BufferizableOpInterfaceImpl.h>
+#include <mlir/Dialect/Linalg/Transforms/BufferizableOpInterfaceImpl.h>
+#include <mlir/Dialect/SCF/Transforms/BufferizableOpInterfaceImpl.h>
+#include <mlir/Dialect/Tensor/IR/TensorInferTypeOpInterfaceImpl.h>
+#include <mlir/Dialect/Tensor/Transforms/BufferizableOpInterfaceImpl.h>
+
+#include <mlir/Target/LLVMIR/Dialect/Builtin/BuiltinToLLVMIRTranslation.h>
+#include <mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h>
 
 namespace tensor_compiler {
 
@@ -19,12 +38,7 @@ class MLIRComputeGraphFactory {
 public:
     static std::unique_ptr<MLIRComputeGraph> create(const ComputeGraph &graph,
                                                     const std::string &name = "main_module") {
-        auto context = std::make_unique<mlir::MLIRContext>();
-        context->getOrLoadDialect<mlir::linalg::LinalgDialect>();
-        context->getOrLoadDialect<mlir::arith::ArithDialect>();
-        context->getOrLoadDialect<mlir::tensor::TensorDialect>();
-        context->getOrLoadDialect<mlir::math::MathDialect>();
-        context->getOrLoadDialect<mlir::func::FuncDialect>();
+        auto context = make_mlir_context();
 
         MLIRBuilder builder(context.get());
         mlir::Location loc = builder.builder_.getUnknownLoc();
@@ -67,6 +81,35 @@ public:
         }
 
         return std::make_unique<MLIRComputeGraph>(std::move(context), std::move(module));
+    }
+
+private:
+    static void register_dialects(mlir::DialectRegistry &registry) {
+        registry
+            .insert<mlir::affine::AffineDialect, mlir::arith::ArithDialect,
+                    mlir::bufferization::BufferizationDialect, mlir::cf::ControlFlowDialect,
+                    mlir::func::FuncDialect, mlir::linalg::LinalgDialect, mlir::LLVM::LLVMDialect,
+                    mlir::math::MathDialect, mlir::memref::MemRefDialect, mlir::scf::SCFDialect,
+                    mlir::tensor::TensorDialect>();
+
+        mlir::tensor::registerInferTypeOpInterfaceExternalModels(registry);
+        mlir::arith::registerBufferizableOpInterfaceExternalModels(registry);
+        mlir::linalg::registerBufferizableOpInterfaceExternalModels(registry);
+        mlir::tensor::registerBufferizableOpInterfaceExternalModels(registry);
+        mlir::scf::registerBufferizableOpInterfaceExternalModels(registry);
+        mlir::bufferization::func_ext::registerBufferizableOpInterfaceExternalModels(registry);
+
+        mlir::registerBuiltinDialectTranslation(registry);
+        mlir::registerLLVMDialectTranslation(registry);
+    }
+
+    static std::unique_ptr<mlir::MLIRContext> make_mlir_context() {
+        mlir::DialectRegistry registry;
+        register_dialects(registry);
+        auto context = std::make_unique<mlir::MLIRContext>();
+        context->appendDialectRegistry(registry);
+        context->loadAllAvailableDialects();
+        return context;
     }
 };
 

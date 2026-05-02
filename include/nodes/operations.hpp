@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdint>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -64,11 +65,11 @@ class ConvNode : public OpNode {
     TensorNode *in_Bias; // can be nullptr
 
     size_t dim_;
-    std::vector<int64_t> kernel_shape_; // [x1_size, x2_size, ...]
-    std::vector<int64_t> strides_;      // [x1_stride, x2_stride, ...]
-    std::vector<int64_t> dilations_;    // [x1_dilation, x2_dilation, ...]
-    std::vector<int64_t> pads_;         // [x1_begin, x2_begin, ..., x1_end, x2_end, ...]
-    uint64_t group_ = 1;
+    std::vector<std::int64_t> kernel_shape_; // [x1_size, x2_size, ...]
+    std::vector<std::int64_t> strides_;      // [x1_stride, x2_stride, ...]
+    std::vector<std::int64_t> dilations_;    // [x1_dilation, x2_dilation, ...]
+    std::vector<std::int64_t> pads_;         // [x1_begin, x2_begin, ..., x1_end, x2_end, ...]
+    std::uint64_t group_ = 1;
 
     void validate() {
         if (!in_X || !in_W)
@@ -124,22 +125,22 @@ class ConvNode : public OpNode {
         out_shape.push_back(w_shape[0]); // out_Channels
 
         for (size_t i = 0; i < dim_; ++i) {
-            int64_t d_in = static_cast<int64_t>(x_shape[i + 2]);
-            int64_t k = static_cast<int64_t>(w_shape[i + 2]);
-            int64_t s = strides_[i];
-            int64_t d = dilations_[i];
-            int64_t pad_begin = pads_[i];
-            int64_t pad_end = pads_[i + dim_];
+            std::int64_t d_in = static_cast<std::int64_t>(x_shape[i + 2]);
+            std::int64_t k = static_cast<std::int64_t>(w_shape[i + 2]);
+            std::int64_t s = strides_[i];
+            std::int64_t d = dilations_[i];
+            std::int64_t pad_begin = pads_[i];
+            std::int64_t pad_end = pads_[i + dim_];
 
             // kernel with delation
-            int64_t del_k = d * (k - 1) + 1;
+            std::int64_t del_k = d * (k - 1) + 1;
 
             if (d_in + pad_begin + pad_end < del_k)
                 throw std::runtime_error("ConvNode: Input dimension with padding is too small for "
                                          "kernel with delations " +
                                          std::to_string(i));
 
-            int64_t d_out = (d_in + pad_begin + pad_end - del_k) / s + 1;
+            std::int64_t d_out = (d_in + pad_begin + pad_end - del_k) / s + 1;
             dim_t shape_out = static_cast<dim_t>(d_out);
             out_shape.push_back(shape_out);
         }
@@ -148,10 +149,10 @@ class ConvNode : public OpNode {
     }
 
 public:
-    ConvNode(std::string name, std::vector<int64_t> kernel_shape, TensorNode *X, TensorNode *W,
-             TensorNode *bias = {}, std::vector<int64_t> strides = {},
-             std::vector<int64_t> dilations = {}, std::vector<int64_t> pads = {},
-             uint64_t group = 1)
+    ConvNode(std::string name, std::vector<std::int64_t> kernel_shape, TensorNode *X, TensorNode *W,
+             TensorNode *bias = {}, std::vector<std::int64_t> strides = {},
+             std::vector<std::int64_t> dilations = {}, std::vector<std::int64_t> pads = {},
+             std::uint64_t group = 1)
         : OpNode(std::move(name), NodeType::CONV), in_X{X}, in_W{W}, in_Bias{bias},
           dim_{kernel_shape.size()}, kernel_shape_(std::move(kernel_shape)), group_(group) {
         if (strides.empty())
@@ -176,13 +177,13 @@ public:
         return {in_X, in_W, in_Bias};
     }
 
-    const std::vector<int64_t> &getStrides() const {
+    const std::vector<std::int64_t> &getStrides() const {
         return strides_;
     }
-    const std::vector<int64_t> &getDilations() const {
+    const std::vector<std::int64_t> &getDilations() const {
         return dilations_;
     }
-    const std::vector<int64_t> &getPads() const {
+    const std::vector<std::int64_t> &getPads() const {
         return pads_;
     }
 };

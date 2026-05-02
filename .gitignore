@@ -1,5 +1,6 @@
 .vscode/
 build/
+build-*/
 results/
 third_party
 .venv/
@@ -10,3 +11,4 @@ obj/
 model
 opt_model
 /**/__pycache__/
+kernels_bench.csv
