@@ -67,10 +67,12 @@ public:
     }
 
     Agnode_t *draw(Agraph_t *g) const override {
-        Agnode_t *node = (tensor_) ? tensor_->get_node(g) : get_node(g);
+        Agnode_t *node = get_node(g);
+        //Agnode_t *node = (tensor_) ? tensor_->get_node(g) : get_node(g);
         if (node != nullptr)
             return node;
-        node = (tensor_) ? tensor_->draw(g, name_) : Node::draw(g);
+        node = Node::draw(g);
+        // node = (tensor_) ? tensor_->draw(g, name_) : Node::draw(g);
         for (const auto &out : output_) {
             Agnode_t *out_node = out->draw(g);
             agedge(g, node, out_node, nullptr, 1);

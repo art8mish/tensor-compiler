@@ -11,7 +11,6 @@
 #include <unordered_map>
 #include <vector>
 
-// MLIR includes
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
